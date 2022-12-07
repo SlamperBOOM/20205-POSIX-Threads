@@ -10,6 +10,7 @@
 #include <errno.h>
 
 #define POLL_TIMEOUT (1000)
+char hello_string[15] = "\nEnter query: ";
 
 int running = 1;
 
@@ -81,11 +82,12 @@ int main(int argc, char* argv[]) {
 
     struct pollfd poll_fd[2];
     poll_fd[0].fd = socket_fd;
-    poll_fd[0].events = POLLIN | POLLHUP;
+    poll_fd[0].events = POLLIN;
 
     poll_fd[1].fd = STDIN_FILENO;
     poll_fd[1].events = POLLIN;
 
+    WriteToFd(STDOUT_FILENO, hello_string, 15);
     char line_input[BUFSIZ];
     char socket_input[BUFSIZ];
     while (running) {
@@ -100,14 +102,22 @@ int main(int argc, char* argv[]) {
         }
 
         if (poll_res == -1 && errno != EINTR) {
-            perror("Error while poll");
+            fprintf(stderr, "Error while poll\n");
             close(socket_fd);
             return 1;
         }
 
-        if (poll_fd[0].revents && POLLIN) {
+        if (poll_fd[0].revents & POLLIN) {
             int read_count = (int) read(socket_fd, socket_input, BUFSIZ);
+            if (read_count == 0) {
+                fprintf(stderr, "\nServer closed. Exiting.\n");
+                close(socket_fd);
+                return 0;
+            }
             WriteToFd(STDOUT_FILENO, socket_input, read_count);
+            if (read_count < BUFSIZ) {
+                WriteToFd(STDOUT_FILENO, hello_string, 15);
+            }
         }
 
         if (poll_fd[1].revents && POLLIN) {
@@ -124,7 +134,7 @@ int main(int argc, char* argv[]) {
     if (err != 0) {
         fprintf(stderr, "Error while write to socket\n");
     }
-    printf("Exit client\n");
+    printf("\nExit client\n");
     close(socket_fd);
 
     return 0;

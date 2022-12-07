@@ -10,8 +10,11 @@
 #include <netdb.h>
 #include <pthread.h>
 #include <signal.h>
+#include <poll.h>
+#include <errno.h>
 #include "cache.h"
 
+#define POLL_TIMEOUT (1000)
 #define CLEANUP_TIMEOUT (10)
 #define URL_BUFF_SIZE (1024)
 #define GET_REQ_SIZE (8)
@@ -24,6 +27,7 @@
 
 
 typedef struct {
+    int idx;
     pthread_t pthread;
     int fd;
     char busy;
@@ -38,14 +42,11 @@ typedef struct {
     int running;
 } Server;
 
-int listen_fd;
 int running = 0;
 
 void SigHandler(int id) {
     if (id == SIGINT) {
         running = 0;
-        close(listen_fd);
-        exit(1);
     }
 }
 
@@ -60,7 +61,7 @@ int ParseInt(char* str) {
     return res;
 }
 
-int ParseFullURL(char* host, char* path, int* port, char* full_url) {
+void ParseFullURL(char* host, char* path, int* port, char* full_url) {
     char* url_without_http = strstr(full_url, HTTP_DELIM);
     if (url_without_http == NULL) {
         url_without_http = full_url;
@@ -71,25 +72,17 @@ int ParseFullURL(char* host, char* path, int* port, char* full_url) {
     // default port
     *port = 80;
     if (url_tmp == NULL) {
-        strcpy(host, url_without_http);
         strcpy(path, "/");
+        strcpy(host, url_without_http);
     } else {
+        memcpy(host, url_without_http, url_tmp - url_without_http);
+        host[url_tmp - url_without_http] = '\0';
         if (url_tmp[0] == '/') {
             strcpy(path, url_tmp);
         } else {
-            char * endpoint;
-            *port = (int)strtol(url_tmp, &endpoint, 10);
-            if (*endpoint != '\0') {
-                fprintf(stderr, "Unable to parse: '%s' as port (int)\n", url_tmp);
-                return 1;
-            }
-            strcpy(path, "/");
+            sscanf(url_tmp, ":%99d/%99[^\n]", port, path);
         }
-        int hostEndId = url_tmp - url_without_http;
-        url_without_http[hostEndId] = '\0';
-        strcpy(host, url_without_http);
     }
-    return 0;
 }
 
 int ReadFromHost(int host_socket, char** content) {
@@ -162,7 +155,8 @@ int WriteToClient(int client_fd, const char* buff, int size) {
 }
 
 void HandleClientDisconnect(ClientItem* client) {
-    fprintf(stderr, "Close connection\n");
+    printf("Client %d disconnected\n", client->idx);
+    client->running = 0;
     close(client->fd);
     pthread_exit(NULL);
 }
@@ -174,91 +168,107 @@ void* ClientWorker(void* arg) {
     Server* server = (Server *)client_item->server;
     int client_fd = client_item->fd;
 
+    struct pollfd poll_fd;
+    poll_fd.fd = client_fd;
+    poll_fd.events = POLLIN;
+
     char input_buffer[URL_BUFF_SIZE];
     while (server->running) {
-        int read_bytes = (int)read(client_fd, input_buffer, URL_BUFF_SIZE);
-        if (read_bytes < 1) {
-            HandleClientDisconnect(client_item);
+        poll_fd.revents = 0;
+        int poll_res = poll(&poll_fd, 1, POLL_TIMEOUT);
+
+        if (poll_res == 0) {
+            continue;
         }
-        input_buffer[read_bytes] = '\0';
-        if ((int)input_buffer[0] == 0) {
-            HandleClientDisconnect(client_item);
+
+        if (poll_res == -1 && errno != EINTR) {
+            fprintf(stderr, "Error while poll\n");
+            break;
         }
-        printf("Get request: %s\n", input_buffer);
-        CacheRow* cache_row = GetCacheItem(server->cache, input_buffer, read_bytes);
-        if (cache_row == NULL) {
-            printf("Unable to find %s in cache\n", input_buffer);
-            char host[URL_BUFF_SIZE];
-            char path[URL_BUFF_SIZE];
-            int port;
-            int err = ParseFullURL(host, path, &port, input_buffer);
-            printf("Parsed url: host=%s, path=%s, port=%d\n", host, path, port);
-            if (err != 0) {
+
+        if (poll_fd.revents & POLLIN) {
+            int read_bytes = (int) read(client_fd, input_buffer, URL_BUFF_SIZE);
+            if (read_bytes < 1) {
                 HandleClientDisconnect(client_item);
             }
-            int host_sock = ConnectToHost(host, port);
-            printf("Connected to %s (port %d)\n", host, port);
-            if (host_sock == UNABLE_TO_FIND_HOST) {
-                fprintf(stderr, "Unable to find host: %s\n", host);
-            } else if (host_sock == UNABLE_TO_CONNECT) {
-                fprintf(stderr, "Unable to connect to host: %s\n", host);
-            } else if (host_sock == UNABLE_TO_CREATE_SOCKET) {
-                fprintf(stderr, "Unable to create socket\n");
+            input_buffer[read_bytes] = '\0';
+            if ((int) input_buffer[0] == 0) {
+                HandleClientDisconnect(client_item);
+            }
+            printf("Get request: %s\n", input_buffer);
+            CacheRow *cache_row = GetCacheItem(server->cache, input_buffer, read_bytes);
+            if (cache_row == NULL) {
+                printf("Unable to find %s in cache\n", input_buffer);
+                char host[URL_BUFF_SIZE];
+                char path[URL_BUFF_SIZE];
+                int port;
+                ParseFullURL(host, path, &port, input_buffer);
+                printf("Parsed url: host=%s, path=%s, port=%d\n", host, path, port);
+                int host_sock = ConnectToHost(host, port);
+                printf("Connected to %s (port %d)\n", host, port);
+                if (host_sock == UNABLE_TO_FIND_HOST) {
+                    fprintf(stderr, "Unable to find host: %s\n", host);
+                } else if (host_sock == UNABLE_TO_CONNECT) {
+                    fprintf(stderr, "Unable to connect to host: %s\n", host);
+                } else if (host_sock == UNABLE_TO_CREATE_SOCKET) {
+                    fprintf(stderr, "Unable to create socket\n");
+                } else {
+                    SendRequest(host_sock, path);
+                    printf("Send GET request to %s\n", host);
+
+                    char *content;
+                    int content_size = ReadFromHost(host_sock, &content);
+                    close(host_sock);
+
+                    // write to client
+                    WriteToClient(client_fd, content, content_size);
+                    printf("Send %s response to client\n", host);
+
+                    // write to cache
+                    CacheItem *cache_item = malloc(sizeof(CacheItem));
+                    if (cache_item == NULL) {
+                        HandleClientDisconnect(client_item);
+                    }
+                    cache_item->content = content;
+                    cache_item->last_visited = time(NULL);
+                    cache_item->content_size = content_size;
+                    cache_item->key = malloc((read_bytes + 1) * sizeof(char));
+                    if (cache_item->key == NULL) {
+                        fprintf(stderr, "Unable to allocate memory for cache row\n");
+                    }
+                    strcpy(cache_item->key, input_buffer);
+                    cache_item->key_size = read_bytes;
+                    int err = InsertCacheItem(server->cache, cache_item);
+                    if (err != 0) {
+                        fprintf(stderr, "Unable to save to cache\n");
+                    }
+                    printf("Save %s response to cache\n", host);
+                }
             } else {
-                SendRequest(host_sock, path);
-                printf("Send GET request to %s\n", host);
+                printf("Find %s in cache\n", input_buffer);
 
-                char* content;
-                int content_size = ReadFromHost(host_sock, &content);
-                close(host_sock);
-
-                // write to client
-                WriteToClient(client_fd, content, content_size);
-                printf("Send %s response to client\n", host);
-
-                // write to cache
-                CacheItem* cache_item = malloc(sizeof(CacheItem));
-                if (cache_item == NULL) {
+                // get data from cache
+                int err = WriteToClient(client_fd, cache_row->content, cache_row->content_size);
+                if (err != 0) {
                     HandleClientDisconnect(client_item);
                 }
-                cache_item->content = content;
-                cache_item->last_visited = time(NULL);
-                cache_item->content_size = content_size;
-                cache_item->key = malloc((read_bytes + 1) * sizeof(char));
-                if (cache_item->key == NULL) {
-                    fprintf(stderr, "Unable to allocate memory for cache row\n");
-                }
-                strcpy(cache_item->key, input_buffer);
-                cache_item->key_size = read_bytes;
-                err = InsertCacheItem(server->cache, cache_item);
-                if (err != 0) {
-                    fprintf(stderr, "Unable to save to cache\n");
-                }
-                printf("Save %s response to cache\n", host);
+                // cache_row allocates in GetCacheItem
+                // So client responsible for that memory
+                free(cache_row->content);
+                free(cache_row);
             }
-        } else {
-            printf("Find %s in cache\n", input_buffer);
-
-            // get data from cache
-            int err = WriteToClient(client_fd, cache_row->content, cache_row->content_size);
-            if (err != 0) {
-                HandleClientDisconnect(client_item);
-            }
-            // cache_row allocates in GetCacheItem
-            // So client responsible for that memory
-            free(cache_row->content);
-            free(cache_row);
         }
     }
 
     HandleClientDisconnect(client_item);
+    pthread_exit(NULL);
 }
 
 void* CleanerWorker(void* arg) {
     Server* server = (Server*)arg;
     while (server->running) {
-        sleep(CLEANUP_TIMEOUT);
         printf("Do cache cleanup...\n");
+        sleep(CLEANUP_TIMEOUT);
         LookupAndClean(server->cache, CLEANUP_TIMEOUT);
     }
     pthread_exit(NULL);
@@ -308,6 +318,7 @@ int InitServer(Server* server, int max_clients, int cache_size, int cache_bucket
     }
 
     for (int i = 0; i < server->max_clients; ++i) {
+        server->clients[i].idx = i;
         server->clients[i].busy = 0;
         server->clients[i].running = 0;
         server->clients[i].server = server;
@@ -326,7 +337,7 @@ int RunServer(Server* server, int port) {
     addr.sin_port = htons(port);
 
     // init listen socket
-    listen_fd = socket(AF_INET, SOCK_STREAM, 0);
+    int listen_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (listen_fd == -1){
         fprintf(stderr, "Error while create socket\n");
         return 1;
@@ -345,6 +356,10 @@ int RunServer(Server* server, int port) {
         return 1;
     }
 
+    struct pollfd poll_fd;
+    poll_fd.fd = listen_fd;
+    poll_fd.events = POLLIN;
+
     // start server
     running = 1;
     server->running = 1;
@@ -354,42 +369,63 @@ int RunServer(Server* server, int port) {
     pthread_create(&cleaner_thread, NULL, CleanerWorker, (void *) (server));
 
     while (running) {
-        int new_client_fd = accept(listen_fd, NULL, NULL);
-        if (new_client_fd == -1) {
-            fprintf(stderr, "Error while accept client\n");
+        poll_fd.revents = 0;
+        int poll_res = poll(&poll_fd, 1, POLL_TIMEOUT);
+
+        if (poll_res == 0) {
             continue;
         }
 
-        int client_id = GetNotBusyClient(server->clients, server->max_clients);
-        if (client_id == -1) {
-            fprintf(stderr, "Unable to accept more clients\n");
+        if (poll_res == -1 && errno != EINTR) {
+            fprintf(stderr, "Error while poll\n");
+            break;
+        }
+
+        if (poll_fd.revents & POLLIN) {
+            int new_client_fd = accept(listen_fd, NULL, NULL);
+            if (new_client_fd == -1) {
+                fprintf(stderr, "Error while accept client\n");
+                continue;
+            }
+
             tryToJoinThreads(server);
-            continue;
-        }
+            int client_id = GetNotBusyClient(server->clients, server->max_clients);
+            if (client_id == -1) {
+                fprintf(stderr, "Unable to accept more clients\n");
+                continue;
+            }
 
-        printf("Client %d connected\n", client_id);
-        server->clients[client_id].busy = 1;
-        server->clients[client_id].running = 1;
-        server->clients[client_id].fd = new_client_fd;
-        err = pthread_create(
-                &(server->clients[client_id].pthread),
-                NULL,
-                ClientWorker,
-                (void *)(&(server->clients[client_id]))
-                );
-        if (err != 0) {
-            fprintf(stderr, "Error while create thread\n");
+            printf("Client %d connected\n", client_id);
+            server->clients[client_id].busy = 1;
+            server->clients[client_id].running = 1;
+            server->clients[client_id].fd = new_client_fd;
+            err = pthread_create(
+                    &(server->clients[client_id].pthread),
+                    NULL,
+                    ClientWorker,
+                    (void *)(&(server->clients[client_id]))
+            );
+            if (err != 0) {
+                fprintf(stderr, "Error while create thread\n");
+            }
         }
     }
+    printf("\nGraceful shutdown:\n");
+
     // To stop all threads that is running til server running (every thread)
     server->running = 0;
 
-    for (int i = 0; i < server->max_clients; ++i) {
-        pthread_join(server->clients[i].pthread, NULL);
-    }
+    printf("Joining clients threads...\n");
+    tryToJoinThreads(server);
+    printf("Joining cleaner thread...\n");
+    pthread_join(cleaner_thread, NULL);
 
+    printf("Free memory...\n");
     DeleteCache(server->cache);
     free(server->clients);
+
+    printf("Close socket...\n");
+    close(listen_fd);
 
     return 0;
 }
@@ -397,7 +433,7 @@ int RunServer(Server* server, int port) {
 int main(int argc, char* argv[]) {
     if (argc != 5) {
         fprintf(stderr,
-    "Specify exact 3 args: server port, max clients count, cache_capacity, cache bucket_capacity.\n");
+    "Specify exact 4 args: server port, max clients count, cache_capacity, cache bucket_capacity.\n");
         pthread_exit(NULL);
     }
     // read params
@@ -416,12 +452,16 @@ int main(int argc, char* argv[]) {
     Server server;
     int err = InitServer(&server, max_clients, cache_size, cache_bucket_capacity);
     if (err != 0) {
+        fprintf(stderr, "Unable to init server. Exiting\n");
         return 1;
     }
 
     // run server
     err = RunServer(&server, port);
     if (err != 0) {
+        fprintf(stderr, "Error while run server. Free memory. Exiting\n");
+        DeleteCache(server.cache);
+        free(server.clients);
         return 1;
     }
 
