@@ -28,7 +28,6 @@ void get_host(const char** hostname, size_t* hostname_len, struct phr_header* he
 }
 
 int hostname_to_ip(char* hostname, char* ip) {
-    int sockfd;
     struct addrinfo hints, * servinfo, * p;
     struct sockaddr_in* h;
     int rv;
@@ -135,8 +134,8 @@ int main(int argc, char* argv[]) {
     hostname_to_ip(hostname, ip);
     printf("IP: %s\n", ip);
 
-    int sockfd, connfd;
-    struct sockaddr_in servaddr, cli;
+    int sockfd;
+    struct sockaddr_in servaddr;
 
     // socket create and verification
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -148,7 +147,6 @@ int main(int argc, char* argv[]) {
     bzero(&servaddr, sizeof(servaddr));
 
     // assign IP, PORT
-
     servaddr.sin_family = AF_INET;
     servaddr.sin_addr.s_addr = inet_addr(ip);
     servaddr.sin_port = htons(PORT);
@@ -161,7 +159,6 @@ int main(int argc, char* argv[]) {
     } else {
         printf("connected to the server..\n");
     }
-
     send_request(sock, buf, buf_len);
     receive_response(sock, buf, buf_len);
     close(sockfd);
