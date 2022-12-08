@@ -56,6 +56,11 @@ int main(int argc, char **argv) {
 		pthread_exit(&exit_status);
 	}
 	threadCount = atoi(argv[1]);
+	if (threadCount <= 0) {
+		fprintf(stderr, "pi-counter: threadCount must be a positive "
+						"number\n");
+		pthread_exit(NULL);
+	}
 	if (threadCount > MAX_THREAD_COUNT) {
 		threadCount = MAX_THREAD_COUNT;
 		fprintf(stderr, "thread count decreased to %d\n", MAX_THREAD_COUNT);
