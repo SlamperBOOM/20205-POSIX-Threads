@@ -1,4 +1,4 @@
-GET /hello.htm HTTP/1.1
+CONNECT /hello.htm HTTP/1.1
 User-Agent: Mozilla/4.0 (compatible; MSIE5.01; Windows NT)
 Host: www.tutorialspoint.com
 Accept-Language: en-us

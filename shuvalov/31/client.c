@@ -19,7 +19,7 @@ int main(int argc, char* argv[]) {
     char buf[buf_len];
     int fd;
     fd = open("test.txt", O_RDONLY);
-    ssize_t bytes = receive_response(fd, buf, buf_len);
+    ssize_t bytes = read_all(fd, buf, buf_len);
     close(fd);
 
     int sock_fd;
@@ -49,10 +49,10 @@ int main(int argc, char* argv[]) {
     }
 
     printf("Request:\n%.*s\n", (int) bytes, buf);
-    send_request(sock_fd, buf, bytes);
+    write_all(sock_fd, buf, bytes);
     size_t receive_buf_len = 1024;
     char* receive_buf = (char*) malloc(sizeof(char) * receive_buf_len);
-    ssize_t bytes_read = receive_response(sock_fd, receive_buf, receive_buf_len);
+    ssize_t bytes_read = read_all(sock_fd, receive_buf, receive_buf_len);
     printf("Bytes read: %zd\nResponse:\n%.*s\n\n", bytes_read, (int) bytes_read, receive_buf);
     close(sock_fd);
     free(receive_buf);

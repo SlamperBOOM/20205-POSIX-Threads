@@ -5,5 +5,5 @@ make
 
 ### Run
 ```
-./parser
+./proxy
 ```
