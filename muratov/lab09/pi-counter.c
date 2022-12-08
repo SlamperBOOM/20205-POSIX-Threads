@@ -68,13 +68,13 @@ int main(int argc, char **argv) {
 
 	pthread_t *threads = (pthread_t *) malloc(sizeof(pthread_t) * threadCount);
 	if (threads == NULL) {
-		perror("pi-counter.out: couldn't allocate memory for threads\n");
+		perror("pi-counter.out: couldn't allocate memory for threads");
 		return 1;
 	}
 
 	SumArgs *sArgs = (SumArgs *)malloc(sizeof(SumArgs) * threadCount);
 	if (sArgs == NULL) {
-		perror("pi-counter.out: couldn't allocate memory for thread args\n");
+		perror("pi-counter.out: couldn't allocate memory for thread args");
 		free(threads);
 		return 1;
 	}
