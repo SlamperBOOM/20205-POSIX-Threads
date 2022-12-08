@@ -52,14 +52,13 @@ int main(int argc, char **argv) {
 
 	if (argc != 2) {
 		fprintf(stderr, "usage: ./pi-counter threadCount\n");
-		int exit_status = EXIT_FAILURE;
-		pthread_exit(&exit_status);
+		return 1;
 	}
 	threadCount = atoi(argv[1]);
 	if (threadCount <= 0) {
 		fprintf(stderr, "pi-counter: threadCount must be a positive "
 						"number\n");
-		pthread_exit(NULL);
+		return 1;
 	}
 	if (threadCount > MAX_THREAD_COUNT) {
 		threadCount = MAX_THREAD_COUNT;
