@@ -51,18 +51,18 @@ int main(int argc, char **argv) {
 	sigaction(SIGINT, &sigact, NULL);
 
 	if (argc != 2) {
-		fprintf(stderr, "usage: ./pi-counter threadCount\n");
+		fprintf(stderr, "usage: ./pi-counter.out threadCount\n");
 		return 1;
 	}
 	threadCount = atoi(argv[1]);
 	if (threadCount <= 0) {
-		fprintf(stderr, "pi-counter: threadCount must be a positive "
+		fprintf(stderr, "pi-counter.out: threadCount must be a positive "
 						"number\n");
 		return 1;
 	}
 	if (threadCount > MAX_THREAD_COUNT) {
 		threadCount = MAX_THREAD_COUNT;
-		fprintf(stderr, "pi-counter: thread count decreased to %d\n",
+		fprintf(stderr, "pi-counter.out: thread count decreased to %d\n",
 				MAX_THREAD_COUNT);
 	}
 
