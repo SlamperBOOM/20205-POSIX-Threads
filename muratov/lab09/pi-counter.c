@@ -51,8 +51,9 @@ int main(int argc, char **argv) {
 	sigaction(SIGINT, &sigact, NULL);
 
 	if (argc != 2) {
-		fprintf(stderr, "Wrong argc\n");
-		pthread_exit(NULL);
+		fprintf(stderr, "usage: ./pi-counter threadCount\n");
+		int exit_status = EXIT_FAILURE;
+		pthread_exit(&exit_status);
 	}
 	threadCount = atoi(argv[1]);
 	if (threadCount > MAX_THREAD_COUNT) {
@@ -60,8 +61,7 @@ int main(int argc, char **argv) {
 		fprintf(stderr, "thread count decreased to %d\n", MAX_THREAD_COUNT);
 	}
 
-	pthread_t *threads = (pthread_t *)malloc(sizeof(pthread_t) *
-		threadCount);
+	pthread_t *threads = (pthread_t *) malloc(sizeof(pthread_t) * threadCount);
 	if (threads == NULL) {
 		perror("thread_t malloc");
 		pthread_exit(NULL);

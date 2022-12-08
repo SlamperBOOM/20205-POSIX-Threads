@@ -1,7 +1,7 @@
 CC=gcc
 CFLAGS=-c -Wall -Wextra
 
-FILENAME=prog
+FILENAME=pi-counter
 
 all: $(FILENAME).out
 
