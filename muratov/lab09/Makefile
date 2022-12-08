@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-c -Wall -Wextra
+CFLAGS=-c -Wall -Wextra -Werror -Wpedantic
 
 FILENAME=pi-counter
 
