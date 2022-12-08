@@ -62,7 +62,8 @@ int main(int argc, char **argv) {
 	}
 	if (threadCount > MAX_THREAD_COUNT) {
 		threadCount = MAX_THREAD_COUNT;
-		fprintf(stderr, "thread count decreased to %d\n", MAX_THREAD_COUNT);
+		fprintf(stderr, "pi-counter: thread count decreased to %d\n",
+				MAX_THREAD_COUNT);
 	}
 
 	pthread_t *threads = (pthread_t *) malloc(sizeof(pthread_t) * threadCount);
