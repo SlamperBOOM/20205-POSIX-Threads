@@ -68,15 +68,15 @@ int main(int argc, char **argv) {
 
 	pthread_t *threads = (pthread_t *) malloc(sizeof(pthread_t) * threadCount);
 	if (threads == NULL) {
-		perror("thread_t malloc");
-		pthread_exit(NULL);
+		perror("pi-counter.out: couldn't allocate memory for threads\n");
+		return 1;
 	}
 
 	SumArgs *sArgs = (SumArgs *)malloc(sizeof(SumArgs) * threadCount);
 	if (sArgs == NULL) {
-		perror("sArgs malloc");
+		perror("pi-counter.out: couldn't allocate memory for thread args\n");
 		free(threads);
-		pthread_exit(NULL);
+		return 1;
 	}
 
 	for (int index = 0; index < threadCount; index++) {
@@ -86,7 +86,7 @@ int main(int argc, char **argv) {
 	for (int index = 0; index < threadCount; index++) {
 		if (pthread_create(threads + index, NULL, GetPartialSum,
 						   sArgs + index) != 0) {
-			perror("couldn't create a new thread");
+			perror("pi-counter.out: couldn't create once more thread");
 			printf("created %d threads instead of %d\n", index,
 				   threadCount);
 			threadCount = index;
@@ -98,8 +98,8 @@ int main(int argc, char **argv) {
 	for (int index = 0; index < threadCount; index++) {
 		ResultType *partialSum;
 		if (pthread_join(threads[index], (void **)&partialSum) != 0) {
-			perror("pthread join");
-			printf("thread #%d\n", index);
+			perror("pi-counter.out: couldn't join a thread");
+			printf("thread #%d\n refused to be joined", index);
 		} else {
 			result += *partialSum;
 			free(partialSum);
