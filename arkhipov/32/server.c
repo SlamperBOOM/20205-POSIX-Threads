@@ -168,6 +168,11 @@ void* ClientWorker(void* arg) {
     Server* server = (Server *)client_item->server;
     int client_fd = client_item->fd;
 
+    // Send 1 byte
+    // Just to say client that's server is ready
+    char hello_byte = 1;
+    WriteToClient(client_fd, &hello_byte, 1);
+
     struct pollfd poll_fd;
     poll_fd.fd = client_fd;
     poll_fd.events = POLLIN;
@@ -391,6 +396,7 @@ int RunServer(Server* server, int port) {
             tryToJoinThreads(server);
             int client_id = GetNotBusyClient(server->clients, server->max_clients);
             if (client_id == -1) {
+                close(new_client_fd);
                 fprintf(stderr, "Unable to accept more clients\n");
                 continue;
             }
@@ -406,6 +412,8 @@ int RunServer(Server* server, int port) {
                     (void *)(&(server->clients[client_id]))
             );
             if (err != 0) {
+                server->clients[client_id].busy = 0;
+                server->clients[client_id].running = 0;
                 fprintf(stderr, "Error while create thread\n");
             }
         }

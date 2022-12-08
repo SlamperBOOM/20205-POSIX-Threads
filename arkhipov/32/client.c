@@ -87,7 +87,7 @@ int main(int argc, char* argv[]) {
     poll_fd[1].fd = STDIN_FILENO;
     poll_fd[1].events = POLLIN;
 
-    WriteToFd(STDOUT_FILENO, hello_string, 15);
+    int can_request = 0;
     char line_input[BUFSIZ];
     char socket_input[BUFSIZ];
     while (running) {
@@ -110,17 +110,27 @@ int main(int argc, char* argv[]) {
         if (poll_fd[0].revents & POLLIN) {
             int read_count = (int) read(socket_fd, socket_input, BUFSIZ);
             if (read_count == 0) {
-                fprintf(stderr, "\nServer closed. Exiting.\n");
+                if (!can_request) {
+                    fprintf(stderr, "\nServer reject connection. Exiting\n");
+                } else {
+                    fprintf(stderr, "\nServer closed connection. Exiting.\n");
+                }
                 close(socket_fd);
                 return 0;
             }
-            WriteToFd(STDOUT_FILENO, socket_input, read_count);
-            if (read_count < BUFSIZ) {
+
+            if (!can_request) { // Receive hello byte
                 WriteToFd(STDOUT_FILENO, hello_string, 15);
+                can_request = 1;
+            } else {            // Receive content
+                WriteToFd(STDOUT_FILENO, socket_input, read_count);
+                if (read_count < BUFSIZ) {
+                    WriteToFd(STDOUT_FILENO, hello_string, 15);
+                }
             }
         }
 
-        if (poll_fd[1].revents && POLLIN) {
+        if (poll_fd[1].revents & POLLIN && can_request) {
             int read_count = (int) read(STDIN_FILENO, line_input, BUFSIZ);
             if (line_input[read_count - 1] == '\n') {
                 read_count--;
