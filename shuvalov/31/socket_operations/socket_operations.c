@@ -6,7 +6,7 @@
 #include "socket_operations.h"
 
 int hostname_to_ip(char* hostname, char* ip) {
-    struct addrinfo hints, * servinfo, * p;
+    struct addrinfo hints, * servinfo;
     struct sockaddr_in* h;
     int rv;
 
@@ -20,20 +20,27 @@ int hostname_to_ip(char* hostname, char* ip) {
     }
 
     // loop through all the results and connect to the first we can
-    for (p = servinfo; p != NULL; p = p->ai_next) {
-        h = (struct sockaddr_in*) p->ai_addr;
+//    for (p = servinfo; p != NULL; p = p->ai_next) {
+        h = (struct sockaddr_in*) servinfo->ai_addr;
         strcpy(ip, inet_ntoa(h->sin_addr));
-    }
+//    }
 
     freeaddrinfo(servinfo); // all done with this structure
     return 0;
 }
 
-void write_all(int sock, const char* buf, size_t buf_len) {
-    size_t bytes_written = 0;
-    while (bytes_written < buf_len) {
-        bytes_written = write(sock, buf + bytes_written, buf_len - bytes_written);
+ssize_t write_all(int sock, const char* buf, size_t buf_len) {
+    ssize_t total_bytes_written = 0;
+    while (total_bytes_written < buf_len) {
+        ssize_t bytes_written = write(sock, buf + total_bytes_written, buf_len - total_bytes_written);
+        if (bytes_written == 0) {
+            break;
+        } else if (bytes_written == -1) {
+            return -1;
+        }
+        total_bytes_written += bytes_written;
     }
+    return total_bytes_written;
 }
 
 ssize_t read_all(int sock, char* buf, size_t buf_len) {
@@ -46,6 +53,7 @@ ssize_t read_all(int sock, char* buf, size_t buf_len) {
             return -1;
         }
         total_bytes_read += bytes_read;
+        printf("Total bytes read: %zd\n", total_bytes_read);
     }
     return total_bytes_read;
 }

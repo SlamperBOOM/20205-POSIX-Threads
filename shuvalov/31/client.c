@@ -10,7 +10,8 @@
 #include "socket_operations/socket_operations.h"
 
 #define SA struct sockaddr
-#define PORT 12000
+#define PROXY_PORT 8080
+#define PROXY_IP "127.0.0.1"
 
 extern int errno;
 
@@ -34,10 +35,10 @@ int main(int argc, char* argv[]) {
         printf("Socket successfully created..\n");
     bzero(&servaddr, sizeof(servaddr));
 
-    // assign IP, PORT
+    // assign IP, SERVER_PORT
     servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    servaddr.sin_port = htons(PORT);
+    servaddr.sin_addr.s_addr = inet_addr(PROXY_IP);
+    servaddr.sin_port = htons(PROXY_PORT);
 
     // connect the client socket to server socket
     if (connect(sock_fd, (SA*) &servaddr, sizeof(servaddr)) != 0) {
@@ -45,11 +46,18 @@ int main(int argc, char* argv[]) {
         close(sock_fd);
         return EXIT_FAILURE;
     } else {
-        printf("connected to the server..\n");
+        printf("Connected to the server..\n");
     }
 
     printf("Request:\n%.*s\n", (int) bytes, buf);
-    write_all(sock_fd, buf, bytes);
+    ssize_t bytes_written = write_all(sock_fd, buf, bytes);
+
+    if (bytes_written == -1) {
+        perror("write_all");
+        close(sock_fd);
+        return EXIT_FAILURE;
+    }
+    printf("Bytes written: %zd\n\n", bytes_written);
     size_t receive_buf_len = 1024;
     char* receive_buf = (char*) malloc(sizeof(char) * receive_buf_len);
     ssize_t bytes_read = read_all(sock_fd, receive_buf, receive_buf_len);

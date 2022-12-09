@@ -10,6 +10,6 @@
 
 int hostname_to_ip(char* hostname, char* ip);
 
-void write_all(int sock, const char* buf, size_t buf_len);
+ssize_t write_all(int sock, const char* buf, size_t buf_len);
 
 ssize_t read_all(int sock, char* buf, size_t buf_len);
