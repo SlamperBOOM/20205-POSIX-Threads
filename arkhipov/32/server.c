@@ -19,6 +19,7 @@
 #define URL_BUFF_SIZE (1024)
 #define GET_REQ_SIZE (8)
 #define HTTP_DELIM "://"
+#define GET_PREFIX "GET "
 
 // Errors
 #define UNABLE_TO_FIND_HOST (-1)
@@ -59,6 +60,28 @@ int ParseInt(char* str) {
         exit(1);
     }
     return res;
+}
+
+int ExtractUrl(char* part_url, char* full_url) {
+    int get_prefix_size = strlen(GET_PREFIX);
+    int full_url_size = strlen(full_url);
+
+    if (full_url_size < get_prefix_size || memcmp(GET_PREFIX, full_url, get_prefix_size) != 0) {
+        return 1;
+    }
+
+    full_url += get_prefix_size;
+    char* url_without_http = strstr(full_url, HTTP_DELIM);
+    if (url_without_http == NULL) {
+        url_without_http = full_url;
+    } else {
+        url_without_http += strlen(HTTP_DELIM);
+    }
+    char* end = strstr(url_without_http, " HTTP");
+    int part_url_size = end - url_without_http;
+    memcpy(part_url, url_without_http, part_url_size);
+    part_url[part_url_size] = '\0';
+    return 0;
 }
 
 void ParseFullURL(char* host, char* path, int* port, char* full_url) {
@@ -145,7 +168,7 @@ int ConnectToHost(char* host, int port) {
 int WriteToClient(int client_fd, const char* buff, int size) {
     int write_size = 0;
     while (write_size != size) {
-        int write_iter = (int)write(client_fd, buff + write_size, size);
+        int write_iter = send(client_fd, buff + write_size, size, 0);
         if (write_iter < 1) {
             return 1;
         }
@@ -154,9 +177,10 @@ int WriteToClient(int client_fd, const char* buff, int size) {
     return 0;
 }
 
-void HandleClientDisconnect(ClientItem* client) {
+void HandleClientDisconnect(ClientItem* client, Server* server) {
     printf("Client %d disconnected\n", client->idx);
     client->running = 0;
+    shutdown(client->fd, SHUT_RDWR);
     close(client->fd);
     pthread_exit(NULL);
 }
@@ -167,11 +191,6 @@ void* ClientWorker(void* arg) {
     ClientItem* client_item = (ClientItem *)arg;
     Server* server = (Server *)client_item->server;
     int client_fd = client_item->fd;
-
-    // Send 1 byte
-    // Just to say client that's server is ready
-    char hello_byte = 1;
-    WriteToClient(client_fd, &hello_byte, 1);
 
     struct pollfd poll_fd;
     poll_fd.fd = client_fd;
@@ -194,20 +213,26 @@ void* ClientWorker(void* arg) {
         if (poll_fd.revents & POLLIN) {
             int read_bytes = (int) read(client_fd, input_buffer, URL_BUFF_SIZE);
             if (read_bytes < 1) {
-                HandleClientDisconnect(client_item);
+                HandleClientDisconnect(client_item, server);
             }
             input_buffer[read_bytes] = '\0';
             if ((int) input_buffer[0] == 0) {
-                HandleClientDisconnect(client_item);
+                HandleClientDisconnect(client_item, server);
             }
-            printf("Get request: %s\n", input_buffer);
+            printf("Get request:\n%s\n", input_buffer);
             CacheRow *cache_row = GetCacheItem(server->cache, input_buffer, read_bytes);
             if (cache_row == NULL) {
-                printf("Unable to find %s in cache\n", input_buffer);
+                printf("Unable to find:\n%s\nin cache\n", input_buffer);
+                char url[BUFSIZ];
+                int err = ExtractUrl(url, input_buffer);
+                if (err != 0) {
+                    fprintf(stderr, "Unable to extract url from request\n");
+                    HandleClientDisconnect(client_item, server);
+                }
                 char host[URL_BUFF_SIZE];
                 char path[URL_BUFF_SIZE];
                 int port;
-                ParseFullURL(host, path, &port, input_buffer);
+                ParseFullURL(host, path, &port, url);
                 printf("Parsed url: host=%s, path=%s, port=%d\n", host, path, port);
                 int host_sock = ConnectToHost(host, port);
                 printf("Connected to %s (port %d)\n", host, port);
@@ -232,7 +257,7 @@ void* ClientWorker(void* arg) {
                     // write to cache
                     CacheItem *cache_item = malloc(sizeof(CacheItem));
                     if (cache_item == NULL) {
-                        HandleClientDisconnect(client_item);
+                        HandleClientDisconnect(client_item, server);
                     }
                     cache_item->content = content;
                     cache_item->last_visited = time(NULL);
@@ -248,6 +273,8 @@ void* ClientWorker(void* arg) {
                         fprintf(stderr, "Unable to save to cache\n");
                     }
                     printf("Save %s response to cache\n", host);
+
+                    HandleClientDisconnect(client_item, server);
                 }
             } else {
                 printf("Find %s in cache\n", input_buffer);
@@ -255,7 +282,7 @@ void* ClientWorker(void* arg) {
                 // get data from cache
                 int err = WriteToClient(client_fd, cache_row->content, cache_row->content_size);
                 if (err != 0) {
-                    HandleClientDisconnect(client_item);
+                    HandleClientDisconnect(client_item, server);
                 }
                 // cache_row allocates in GetCacheItem
                 // So client responsible for that memory
@@ -265,7 +292,7 @@ void* ClientWorker(void* arg) {
         }
     }
 
-    HandleClientDisconnect(client_item);
+    HandleClientDisconnect(client_item, server);
     pthread_exit(NULL);
 }
 
@@ -316,8 +343,7 @@ int InitServer(Server* server, int max_clients, int cache_size, int cache_bucket
     }
 
     //init cache
-    int err = InitCache(server->cache, cache_size, cache_bucket_capacity);
-    if (err != 0) {
+    if (InitCache(server->cache, cache_size, cache_bucket_capacity) != 0) {
         fprintf(stderr, "Error while init cache\n");
         return 1;
     }
@@ -396,6 +422,7 @@ int RunServer(Server* server, int port) {
             tryToJoinThreads(server);
             int client_id = GetNotBusyClient(server->clients, server->max_clients);
             if (client_id == -1) {
+                shutdown(new_client_fd, SHUT_RDWR);
                 close(new_client_fd);
                 fprintf(stderr, "Unable to accept more clients\n");
                 continue;

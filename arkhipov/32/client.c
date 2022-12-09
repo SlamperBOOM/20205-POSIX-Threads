@@ -9,6 +9,7 @@
 #include <signal.h>
 #include <errno.h>
 
+#define GET_REQ_SIZE (16)
 #define POLL_TIMEOUT (1000)
 char hello_string[15] = "\nEnter query: ";
 
@@ -43,6 +44,12 @@ int WriteToFd(int fd, char* content, int content_size) {
     return 0;
 }
 
+void CreateRequest(const char* url, char* request) {
+    strcpy(request, "GET ");
+    strcat(request, url);
+    strcat(request, " HTTP/1.0\r\n");
+}
+
 int main(int argc, char* argv[]) {
     if(argc != 3) {
         fprintf(stderr,"Specify exact 2 args: ip, port");
@@ -75,8 +82,8 @@ int main(int argc, char* argv[]) {
     }
 
     status = connect(socket_fd, (struct sockaddr *)&serverAddress, sizeof(serverAddress));
-    if (status < 0){
-        fprintf(stderr, "Error while connect failed\n");
+    if (status < 0) {
+        fprintf(stderr, "Error while connect. Exiting\n");
         return 1;
     }
 
@@ -87,8 +94,9 @@ int main(int argc, char* argv[]) {
     poll_fd[1].fd = STDIN_FILENO;
     poll_fd[1].events = POLLIN;
 
-    int can_request = 0;
+    WriteToFd(STDOUT_FILENO, hello_string, 15);
     char line_input[BUFSIZ];
+    int line_input_size = 0;
     char socket_input[BUFSIZ];
     while (running) {
 
@@ -110,32 +118,26 @@ int main(int argc, char* argv[]) {
         if (poll_fd[0].revents & POLLIN) {
             int read_count = (int) read(socket_fd, socket_input, BUFSIZ);
             if (read_count == 0) {
-                if (!can_request) {
-                    fprintf(stderr, "\nServer reject connection. Exiting\n");
-                } else {
-                    fprintf(stderr, "\nServer closed connection. Exiting.\n");
-                }
+                fprintf(stderr, "\nServer closed (or rejected) connection. Exiting.\n");
                 close(socket_fd);
                 return 0;
             }
-
-            if (!can_request) { // Receive hello byte
+            WriteToFd(STDOUT_FILENO, socket_input, read_count);
+            if (read_count < BUFSIZ) {
                 WriteToFd(STDOUT_FILENO, hello_string, 15);
-                can_request = 1;
-            } else {            // Receive content
-                WriteToFd(STDOUT_FILENO, socket_input, read_count);
-                if (read_count < BUFSIZ) {
-                    WriteToFd(STDOUT_FILENO, hello_string, 15);
-                }
             }
         }
 
-        if (poll_fd[1].revents & POLLIN && can_request) {
-            int read_count = (int) read(STDIN_FILENO, line_input, BUFSIZ);
-            if (line_input[read_count - 1] == '\n') {
-                read_count--;
+        if (poll_fd[1].revents & POLLIN) {
+            line_input_size += (int) read(STDIN_FILENO, line_input + line_input_size, BUFSIZ);
+            if (line_input[line_input_size - 1] == '\n') {
+                line_input_size--;
+                line_input[line_input_size] = '\0';
+                char request[strlen(line_input) + GET_REQ_SIZE];
+                CreateRequest(line_input, request);
+                line_input_size = 0;
+                WriteToFd(socket_fd, request, strlen(request));
             }
-            WriteToFd(socket_fd, line_input, read_count);
         }
     }
 
