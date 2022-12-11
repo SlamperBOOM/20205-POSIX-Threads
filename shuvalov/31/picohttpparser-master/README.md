@@ -24,10 +24,10 @@ The library exposes four functions: `phr_parse_request`, `phr_parse_response`, `
 The example below reads an HTTP request from socket `sock` using `read(2)`, parses it using `phr_parse_request`, and prints the details.
 
 ```c
-char buf[4096], *method, *path;
+char buf[4096], *message, *path;
 int pret, minor_version;
 struct phr_header headers[100];
-size_t buflen = 0, prevbuflen = 0, method_len, path_len, num_headers;
+size_t buflen = 0, prevbuflen = 0, message_len, path_len, num_headers;
 ssize_t rret;
 
 while (1) {
@@ -40,7 +40,7 @@ while (1) {
     buflen += rret;
     /* parse the request */
     num_headers = sizeof(headers) / sizeof(headers[0]);
-    pret = phr_parse_request(buf, buflen, &method, &method_len, &path, &path_len,
+    pret = phr_parse_request(buf, buflen, &message, &message_len, &path, &path_len,
                              &minor_version, headers, &num_headers, prevbuflen);
     if (pret > 0)
         break; /* successfully parsed the request */
@@ -53,7 +53,7 @@ while (1) {
 }
 
 printf("request is %d bytes long\n", pret);
-printf("method is %.*s\n", (int)method_len, method);
+printf("message is %.*s\n", (int)message_len, message);
 printf("path is %.*s\n", (int)path_len, path);
 printf("HTTP version is 1.%d\n", minor_version);
 printf("headers:\n");
