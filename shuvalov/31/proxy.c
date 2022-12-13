@@ -17,7 +17,7 @@
 #define PROXY_PORT 8080
 #define PROXY_IP "0.0.0.0"
 #define BUF_SIZE 4096
-#define MAX_FDS 10
+#define MAX_FDS 20
 #define USAGE "proxy IP PORT"
 
 long proxy_port;
@@ -34,11 +34,11 @@ struct request {
 };
 
 struct response {
-    struct client* clients[10];
+    struct client* clients[100];
     char* buf, * message;
     struct phr_header headers[100];
     size_t buf_size, buf_len, prev_buf_len, message_len, num_headers;
-    int minor_version, status, clients_num;
+    int minor_version, status, clients_num, content_length, not_content_length;
 };
 
 struct cached_response {
@@ -68,21 +68,21 @@ struct server {
     int clients_num, fd, processed;
 };
 
-ssize_t get_hostname(char** hostname, size_t* hostname_len, struct phr_header* headers, size_t num_headers) {
+ssize_t
+get_header_value(char** value, size_t* value_len, char* header_name, struct phr_header* headers, size_t num_headers) {
     for (size_t i = 0; i < num_headers; i++) {
-        if (strncmp(headers[i].name, "Host", headers[i].name_len) == 0) {
-            *hostname_len = headers[i].value_len;
-            *hostname = (char*) malloc(sizeof(char) * *hostname_len);
-            if (*hostname == NULL) {
+        if (strncmp(headers[i].name, header_name, headers[i].name_len) == 0) {
+            *value_len = headers[i].value_len;
+            *value = (char*) malloc(sizeof(char) * *value_len);
+            if (*value == NULL) {
                 perror("malloc");
-                return 1;
+                return 2;
             }
-            strncpy(*hostname, headers[i].value, *hostname_len);
+            strncpy(*value, headers[i].value, *value_len);
             return 0;
         }
     }
-    free(*hostname);
-    *hostname = NULL;
+    *value = NULL;
     return 1;
 }
 
@@ -116,7 +116,6 @@ int add_fd_to_servers(int fd, struct sockaddr_in serv_addr,
         if (servers[i].fd == -1) {
             servers[i].fd = fd;
             servers[i].processed = 1;
-            servers[i].processed = 0;
             servers[i].serv_addr = serv_addr;
             servers[i].poll_index = poll_index;
             servers[i].request = request;
@@ -166,6 +165,9 @@ int setup_server(int index, struct server* servers) {
     }
     servers[index].response->clients_num = 0;
     servers[index].response->buf_size = BUF_SIZE;
+    servers[index].response->buf_len = 0;
+    servers[index].response->content_length = -1;
+    servers[index].response->not_content_length = -1;
     servers[index].response->buf = (char*) malloc(sizeof(char) * servers[index].response->buf_size);
     if (servers[index].response->buf == NULL) {
         perror("malloc failed");
@@ -189,6 +191,34 @@ void free_servers(struct server* servers, size_t servers_num) {
 //            free(servers[i].response->buf);
 //        }
 //    }
+}
+
+ssize_t get_substring(char* substring, char* string, size_t string_length) {
+    char* p1, * p2, * p3;
+    p1 = string;
+    p2 = substring;
+    int substring_beginning;
+    for (int i = 0; i < string_length; i++) {
+        if (*p1 == *p2) {
+            p3 = p1;
+            int j;
+            for (j = 0; j < strlen(substring); j++) {
+                if (*p3 == *p2) {
+                    p3++;
+                    p2++;
+                } else {
+                    break;
+                }
+            }
+            p2 = substring;
+            if (strlen(substring) == j) {
+                substring_beginning = i;
+                return substring_beginning;
+            }
+        }
+        p1++;
+    }
+    return -1;
 }
 
 void close_client(int fd, struct pollfd* poll_fds, size_t poll_fds_num, struct client* clients, int client_index) {
@@ -224,10 +254,12 @@ int receive_from_client(struct client* client, int client_index, struct pollfd* 
                                 client->request.buf_size - client->request.buf_len)) == -1 &&
            errno == EINTR);
     if (return_value < 0) {
-        perror("read");
+        perror("read from client");
         close_client(client->fd, poll_fds, poll_fds_num, clients, client_index);
         return 1;
-    } else if (return_value > 0) { //TODO handle 0 correctly
+    } else if (return_value >= 0) { //TODO handle 0 correctly
+        printf("read from client\n");
+
         client->request.prev_buf_len = client->request.buf_len;
         client->request.buf_len += return_value;
         client->request.num_headers = sizeof(client->request.headers) / sizeof(client->request.headers[0]);
@@ -261,13 +293,14 @@ int receive_from_client(struct client* client, int client_index, struct pollfd* 
         if (strncmp("GET", client->request.method, client->request.method_len) != 0) {
             fprintf(stderr, "Method %.*s is not implemented\n",
                     (int) client->request.method_len, client->request.method);
-//                        char* client_response = "501 Not Implemented";
-//                        write_all(client->fd, client_response, strlen(client_response));
+            char* client_response = "501 Not Implemented";
+            write_all(client->fd, client_response, strlen(client_response));
             close_client(client->fd, poll_fds, poll_fds_num, clients, client_index);
             return 1;
         }
 
-        struct cached_response* cached_response = hashmap_get(cache, &(struct cached_response){ .url = client->request.path});
+        struct cached_response* cached_response = hashmap_get(cache,
+                                                              &(struct cached_response) {.url = client->request.path});
         if (cached_response != NULL) {
             cached_response->response->clients[cached_response->response->clients_num++] = client;
             client->response = cached_response->response;
@@ -276,15 +309,15 @@ int receive_from_client(struct client* client, int client_index, struct pollfd* 
             } else {
                 poll_fds[client->poll_index].events = 0;
             }
-            printf("Client events: %d\n", poll_fds[client->poll_index].events);
+//            printf("Client events: %d\n", poll_fds[client->poll_index].events);
             return 0;
         }
         char* hostname;
         size_t hostname_len;
-        return_value = get_hostname(&hostname, &hostname_len,
-                                    client->request.headers, client->request.num_headers);
-        if (return_value == 1) {
-            fprintf(stderr, "get_hostname failed\n");
+        return_value = get_header_value(&hostname, &hostname_len, "Host",
+                                        client->request.headers, client->request.num_headers);
+        if (return_value > 0) {
+            fprintf(stderr, "get_header_value failed\n");
             return 1;
         }
         char ip[100];
@@ -331,11 +364,12 @@ int receive_from_client(struct client* client, int client_index, struct pollfd* 
 int send_to_client(struct client* client, int client_index, struct pollfd* poll_fds, size_t poll_fds_num,
                    struct client* clients) {
     ssize_t return_value;
+    printf("Bytes written: %zd\nBuffer length: %zu\n", client->bytes_written, client->response->buf_len);
     while ((return_value = write(client->fd, client->response->buf + client->bytes_written,
                                  client->response->buf_len - client->bytes_written)) == -1 &&
            errno == EINTR);
     if (return_value < 0) {
-        perror("read");
+        perror("write to client");
         close(client->fd);
         remove_from_poll(client->fd, poll_fds, poll_fds_num);
         setup_client(client_index, clients);
@@ -343,14 +377,30 @@ int send_to_client(struct client* client, int client_index, struct pollfd* poll_
     }
     client->bytes_written += return_value;
     poll_fds[client->poll_index].events = 0;
-    if (return_value == 0 || client->response->buf_len == client->bytes_written) {
+    if (return_value == 0) {
         printf("Send request to the client\n");
-        printf("Bytes written: %zd\n", client->bytes_written);
+        printf("Total bytes written: %zd\n", client->bytes_written);
         close(client->fd);
         remove_from_poll(client->fd, poll_fds, poll_fds_num);
         setup_client(client_index, clients);
+        return 0;
     }
-    return 0;
+    if (client->response->content_length + client->response->not_content_length == client->bytes_written &&
+        client->response->content_length != 1 &&
+        client->response->not_content_length != 1) {
+        printf("Length of written bytes and declared are equal\n");
+        printf("Send request to the client\n");
+        printf("Total bytes written: %zd\n", client->bytes_written);
+        close(client->fd);
+        remove_from_poll(client->fd, poll_fds, poll_fds_num);
+        setup_client(client_index, clients);
+        return 0;
+    }
+//    if (client->response->buf_len == client->bytes_written) {
+//        poll_fds[client->poll_index].events = 0;
+//        printf("Total bytes written: %zd\n", client->bytes_written);
+//    }
+        return 0;
 }
 
 int process_clients(struct pollfd* poll_fds, size_t poll_fds_num, struct client* clients, size_t clients_size,
@@ -386,13 +436,12 @@ int connect_to_server(struct server* server, int server_index, struct pollfd* po
 
 int send_to_server(struct server* server, int server_index, struct pollfd* poll_fds, size_t poll_fds_num,
                    struct server* servers) {
-    printf("buf_len: %zd\n", server->request->buf_len);
     ssize_t return_value;
     while ((return_value = write(server->fd, server->request->buf + server->bytes_written,
                                  server->request->buf_len - server->bytes_written)) == -1 &&
            errno == EINTR);
     if (return_value < 0) {
-        perror("read");
+        perror("write to server");
         close_server(server->fd, poll_fds, poll_fds_num, servers, server_index);
         return 1;
     } else if (return_value == 0) {
@@ -407,74 +456,106 @@ int send_to_server(struct server* server, int server_index, struct pollfd* poll_
 int receive_from_server(struct server* server, int server_index, struct pollfd* poll_fds, size_t poll_fds_num,
                         struct client* clients,
                         struct server* servers) {
-    //TODO just in the moment when proxy read servers response
-    // we have to write it to the clients
-
     ssize_t return_value;
     while ((return_value = read(server->fd, server->response->buf + server->response->buf_len,
                                 server->response->buf_size - server->response->buf_len)) == -1 &&
            errno == EINTR);
     if (return_value < 0) {
-        perror("read");
+        perror("read from client");
         for (int k = 0; k < server->response->clients_num; k++) {
             close_client(server->response->clients[k]->fd, poll_fds, poll_fds_num, clients, -1);
         }
         close_server(server->fd, poll_fds, poll_fds_num, servers, server_index);
         return 1;
-    } else if (return_value == 0) { //TODO handle correctly
+    }
+    if (return_value == 0) {
         for (int k = 0; k < server->response->clients_num; k++) {
-            printf("Client POLLOUT\n");
+//            printf("Client POLLOUT\n");
             poll_fds[server->response->clients[k]->poll_index].events = POLLOUT;
-            close_server(server->fd, poll_fds, poll_fds_num, servers, server_index);
         }
-    } else {
-        server->response->prev_buf_len = server->response->buf_len;
-        server->response->buf_len += return_value;
-        server->response->num_headers = sizeof(server->response->headers) /
-                                       sizeof(server->response->headers[0]);
-        int parse_result = phr_parse_response(server->response->buf,
-                                              server->response->buf_len,
-                                              &server->response->minor_version,
-                                              &server->response->status,
-                                              (const char**) &server->response->message,
-                                              &server->response->message_len,
-                                              server->response->headers,
-                                              &server->response->num_headers,
-                                              server->response->prev_buf_len
-        );
-
-        if (parse_result == -1) {
-            fprintf(stderr, "response is too long\n");
+        printf("Response length: %zu\n", server->response->buf_len);
+        printf("\nResponse:\n%.*s\n", (int) server->response->buf_len, server->response->buf);
+        close_server(server->fd, poll_fds, poll_fds_num, servers, server_index);
+        return 0;
+    }
+    server->response->prev_buf_len = server->response->buf_len;
+    server->response->buf_len += return_value;
+    if (server->response->buf_len == server->response->buf_size) {
+        printf("Increase buffer size\n");
+        server->response->buf_size *= 2;
+        server->response->buf = (char*) realloc(server->response->buf, sizeof(char) * server->response->buf_size);
+        if (server->response->buf == NULL) {
+            perror("realloc failed");
             for (int k = 0; k < server->response->clients_num; k++) {
                 close_client(server->response->clients[k]->fd, poll_fds, poll_fds_num, clients, -1);
             }
             close_server(server->fd, poll_fds, poll_fds_num, servers, server_index);
             return 1;
         }
-        if (parse_result == 2) {
-            printf("Read now: %zd\n", return_value);
+    }
+    printf("\nTotal bytes read: %zu\n\n", server->response->buf_len);
+    server->response->num_headers = sizeof(server->response->headers) /
+                                    sizeof(server->response->headers[0]);
+    phr_parse_response(server->response->buf,
+                       server->response->buf_len,
+                       &server->response->minor_version,
+                       &server->response->status,
+                       (const char**) &server->response->message,
+                       &server->response->message_len,
+                       server->response->headers,
+                       &server->response->num_headers,
+                       server->response->prev_buf_len
+    );
+    if (server->response->content_length == -1) {
+        char* content_length;
+        size_t content_length_len;
+        return_value = get_header_value(&content_length, &content_length_len, "Content-Length",
+                                        server->response->headers, server->response->num_headers);
+        if (return_value == 2) {
             for (int k = 0; k < server->response->clients_num; k++) {
-                printf("Client POLLOUT\n");
-                poll_fds[server->response->clients[k]->poll_index].events = POLLOUT;
+                close_client(server->response->clients[k]->fd, poll_fds, poll_fds_num, clients, -1);
             }
-        } else {
-            if (server->response->buf_len == server->response->buf_size) {
-                fprintf(stderr, "response is too long\n");
-                for (int k = 0; k < server->response->clients_num; k++) {
-                    close_client(server->response->clients[k]->fd, poll_fds, poll_fds_num, clients, -1);
-                }
-                close_server(server->fd, poll_fds, poll_fds_num, servers, server_index);
-                return 1;
-            }
-            for (int k = 0; k < server->response->clients_num; k++) {
-                printf("Client POLLOUT\n");
-                poll_fds[server->response->clients[k]->poll_index].events = POLLOUT;
-            }
-            printf("Response length: %zu\n", server->response->buf_len);
-            printf("\nResponse:\n%.*s\n", (int) server->response->buf_len, server->response->buf);
             close_server(server->fd, poll_fds, poll_fds_num, servers, server_index);
+            return 1;
+        }
+        if (return_value == 0) {
+            server->response->content_length = (int) strtol(content_length, NULL, 0);
+            printf("Content length: %d\n", server->response->content_length);
         }
     }
+    if (server->response->not_content_length == -1) {
+        printf("Not content length ?\n");
+        return_value = get_substring("\r\n\r\n", server->response->buf, server->response->buf_len);
+        if (return_value >= 0) {
+            server->response->not_content_length = (int) return_value + 4;
+            printf("Not content length: %d\n", server->response->not_content_length);
+        }
+    }
+//        if (parse_result == -1) {
+//            fprintf(stderr, "response is too long\n");
+//            for (int k = 0; k < server->response->clients_num; k++) {
+//                close_client(server->response->clients[k]->fd, poll_fds, poll_fds_num, clients, -1);
+//            }
+//            close_server(server->fd, poll_fds, poll_fds_num, servers, server_index);
+//            return 1;
+//        }
+    for (int k = 0; k < server->response->clients_num; k++) {
+//        printf("Client POLLOUT\n");
+        poll_fds[server->response->clients[k]->poll_index].events = POLLOUT;
+    }
+//        if (parse_result == 2) {
+//            printf("Read now: %zd\n", return_value);
+//
+//        } else {
+//            for (int k = 0; k < server->response->clients_num; k++) {
+//                printf("Client POLLOUT\n");
+//                poll_fds[server->response->clients[k]->poll_index].events = POLLOUT;
+//            }
+//            printf("Response length: %zu\n", server->response->buf_len);
+//            printf("\nResponse:\n%.*s\n", (int) server->response->buf_len, server->response->buf);
+//            close_server(server->fd, poll_fds, poll_fds_num, servers, server_index);
+//        }
+
     return 0;
 }
 
@@ -484,13 +565,13 @@ int process_servers(struct pollfd* poll_fds, size_t poll_fds_num, struct client*
         struct server* server = &servers[i];
         if (server->fd != -1 && !server->processed) {
             if ((poll_fds[server->poll_index].revents & (POLLOUT | POLLHUP)) == (POLLOUT | POLLHUP)) {
-                printf("connect_to_server\n");
+//                printf("connect_to_server\n");
                 connect_to_server(server, i, poll_fds, poll_fds_num, servers);
             } else if ((poll_fds[server->poll_index].revents & POLLOUT) == POLLOUT) {
-                printf("send_to_server\n");
+//                printf("send_to_server\n");
                 send_to_server(server, i, poll_fds, poll_fds_num, servers);
             } else if ((poll_fds[server->poll_index].revents & POLLIN) == POLLIN) {
-                printf("receive_from_server\n");
+//                printf("receive_from_server\n");
                 receive_from_server(server, i, poll_fds, poll_fds_num, clients, servers);
             }
         }
@@ -498,8 +579,8 @@ int process_servers(struct pollfd* poll_fds, size_t poll_fds_num, struct client*
     return 0;
 }
 
-int
-accept_client(struct pollfd* poll_fds, size_t poll_fds_num, struct client* clients, size_t clients_size, int proxy_fd) {
+int accept_client(struct pollfd* poll_fds, size_t poll_fds_num,
+        struct client* clients, size_t clients_size, int proxy_fd) {
     if (poll_fds[0].revents & POLLIN) {
         if (poll_fds[0].fd == proxy_fd) {
             int client_fd = accept(proxy_fd, NULL, NULL);
@@ -534,8 +615,7 @@ uint64_t cached_response_hash(const void* item, uint64_t seed0, uint64_t seed1) 
     return hashmap_sip(cached_response->url, strlen(cached_response->url), seed0, seed1);
 }
 
-//TODO handle errors in process_servers
-// add cache
+//TODO handle signals
 
 int main(int argc, char* argv[]) {
     int error = 0;
@@ -608,9 +688,9 @@ int main(int argc, char* argv[]) {
     poll_fds[0].fd = proxy_fd;
     poll_fds[0].events = POLLIN;
     int iter = 0;
-    while (iter++ < 1000) {
+    while (iter < 200) {
 //    while (1) {
-        printf("%d.\n", iter++);
+        printf("\n%d.\n", iter++);
         int poll_return = poll(poll_fds, poll_fds_num, -1);
         if (poll_return == -1) {
             perror("poll failed");
@@ -621,16 +701,15 @@ int main(int argc, char* argv[]) {
         for (int i = 0; i < poll_fds_num; i++) {
             printf("%d ", poll_fds[i].revents);
         }
-        printf("\n");
+        printf("\n\n====Client accepting====\n");
         if (accept_client(poll_fds, poll_fds_num, clients, clients_size, proxy_fd) == 1) {
             fprintf(stderr, "accept_client failed\n");
         }
-        printf("Client accepted\n");
+        printf("========================\n\n===Clients processing===\n");
         process_clients(poll_fds, poll_fds_num, clients, clients_size, servers, servers_size);
-        printf("Clients processed\n");
+        printf("========================\n\n===Servers processing===\n");
         process_servers(poll_fds, poll_fds_num, clients, servers, servers_size);
-        printf("Servers processed\n");
-
+        printf("========================\n\n");
         for (int i = 0; i < poll_fds_num; i++) {
             servers[i].processed = 0;
             clients[i].processed = 0;
