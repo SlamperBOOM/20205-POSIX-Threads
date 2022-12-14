@@ -159,8 +159,6 @@ int receive_from_client(struct client* client, int client_index, struct pollfd* 
         if (strncmp("GET", client->request.method, client->request.method_len) != 0) {
             fprintf(stderr, "Method %.*s is not implemented\n",
                     (int) client->request.method_len, client->request.method);
-            char* client_response = "501 Not Implemented";
-            write_all(client->fd, client_response, strlen(client_response));
             close_client(client->fd, poll_fds, poll_fds_num, clients, client_index);
             return 1;
         }
