@@ -50,4 +50,7 @@ int add_fd_to_servers(int fd, struct sockaddr_in serv_addr,
                       size_t poll_index, struct request* request,
                       struct server* servers, size_t servers_size);
 
+ssize_t get_header_value(char** value, size_t* value_len, char* header_name,
+                         struct phr_header* headers, size_t num_headers);
+
 #endif //INC_31_HTTP_SOCKET_H

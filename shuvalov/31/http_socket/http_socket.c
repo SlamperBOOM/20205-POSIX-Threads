@@ -1,4 +1,5 @@
 #include <malloc.h>
+#include <string.h>
 #include "http_socket.h"
 
 #define BUF_SIZE 4096
@@ -71,4 +72,22 @@ int add_fd_to_servers(int fd, struct sockaddr_in serv_addr,
         }
     }
     return -1;
+}
+
+ssize_t get_header_value(char** value, size_t* value_len, char* header_name,
+                         struct phr_header* headers, size_t num_headers) {
+    for (size_t i = 0; i < num_headers; i++) {
+        if (strncmp(headers[i].name, header_name, headers[i].name_len) == 0) {
+            *value_len = headers[i].value_len;
+            *value = (char*) malloc(sizeof(char) * *value_len);
+            if (*value == NULL) {
+                perror("malloc");
+                return 2;
+            }
+            strncpy(*value, headers[i].value, *value_len);
+            return 0;
+        }
+    }
+    *value = NULL;
+    return 1;
 }

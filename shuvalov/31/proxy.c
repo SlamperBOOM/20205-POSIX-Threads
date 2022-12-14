@@ -1,4 +1,5 @@
 #define _GNU_SOURCE
+
 #include <sys/types.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,7 +16,6 @@
 #include "http_socket/http_socket.h"
 #include "http_socket/cache.h"
 #include "http_socket/picohttpparser/picohttpparser.h"
-#include "http_socket/hashmap/hashmap.h"
 
 #define SA struct sockaddr
 #define SERVER_PORT 80
@@ -24,29 +24,13 @@
 #define BUF_SIZE 4096
 #define MAX_FDS 20
 #define USAGE "proxy IP PORT"
+#define WRITE_BUFFER_SIZE 30000
 
 long proxy_port = PROXY_PORT;
 char* proxy_ip = PROXY_IP;
+struct cache cache;
 
 extern int errno;
-
-ssize_t get_header_value(char** value, size_t* value_len, char* header_name,
-                         struct phr_header* headers, size_t num_headers) {
-    for (size_t i = 0; i < num_headers; i++) {
-        if (strncmp(headers[i].name, header_name, headers[i].name_len) == 0) {
-            *value_len = headers[i].value_len;
-            *value = (char*) malloc(sizeof(char) * *value_len);
-            if (*value == NULL) {
-                perror("malloc");
-                return 2;
-            }
-            strncpy(*value, headers[i].value, *value_len);
-            return 0;
-        }
-    }
-    *value = NULL;
-    return 1;
-}
 
 int add_fd_to_poll(int fd, short events, struct pollfd* poll_fds, size_t poll_fds_num) {
     for (int i = 0; i < poll_fds_num; i++) {
@@ -143,16 +127,13 @@ int receive_from_client(struct client* client, int client_index, struct pollfd* 
         return 1;
     } else { //TODO handle 0 correctly
         printf("read from client\n");
-
         client->request.prev_buf_len = client->request.buf_len;
         client->request.buf_len += return_value;
-
         if (client->request.buf_len == 0) {
             printf("Client closed\n");
             close_client(client->fd, poll_fds, poll_fds_num, clients, client_index);
             return 0;
         }
-
         client->request.num_headers = sizeof(client->request.headers) / sizeof(client->request.headers[0]);
         parse_result = phr_parse_request(client->request.buf,
                                          client->request.buf_len,
@@ -169,7 +150,6 @@ int receive_from_client(struct client* client, int client_index, struct pollfd* 
             close_client(client->fd, poll_fds, poll_fds_num, clients, client_index);
             return 1;
         }
-        /* request is incomplete, continue the loop */
         if (parse_result == 2) {
             printf("Have read now: %zd\n", return_value);
             return 0;
@@ -189,10 +169,17 @@ int receive_from_client(struct client* client, int client_index, struct pollfd* 
             close_client(client->fd, poll_fds, poll_fds_num, clients, client_index);
             return 1;
         }
-
-        struct cached_response* cached_response = hashmap_get(cache,
-                                                              &(struct cached_response) {.url = client->request.path});
+        char* url = (char*) malloc((clients->request.path_len + 1) * sizeof(char));
+        if (url == NULL) {
+            perror("malloc failed");
+            close_client(client->fd, poll_fds, poll_fds_num, clients, client_index);
+            return 1;
+        }
+        strncpy(url, clients->request.path, clients->request.path_len);
+        url[clients->request.path_len] = '\0';
+        struct cached_response* cached_response = get_cached_response(cache, url);
         if (cached_response != NULL) {
+            printf("Download cached\n");
             cached_response->response->clients[cached_response->response->clients_num++] = client;
             client->response = cached_response->response;
             if (cached_response->response->buf_len > 0) {
@@ -200,7 +187,7 @@ int receive_from_client(struct client* client, int client_index, struct pollfd* 
             } else {
                 poll_fds[client->poll_index].events = 0;
             }
-//            printf("Client events: %d\n", poll_fds[client->poll_index].events);
+            free(url);
             return 0;
         }
         char* hostname;
@@ -209,6 +196,7 @@ int receive_from_client(struct client* client, int client_index, struct pollfd* 
                                         client->request.headers, client->request.num_headers);
         if (return_value > 0) {
             fprintf(stderr, "get_header_value failed\n");
+            free(url);
             return 1;
         }
         char ip[100];
@@ -216,6 +204,7 @@ int receive_from_client(struct client* client, int client_index, struct pollfd* 
         free(hostname);
         if (return_value == 1) {
             close_client(client->fd, poll_fds, poll_fds_num, clients, client_index);
+            free(url);
             return 1;
         }
         printf("IP: %s\n", ip);
@@ -225,6 +214,7 @@ int receive_from_client(struct client* client, int client_index, struct pollfd* 
         if (server_fd == -1) {
             printf("socket creation failed...\n");
             close_client(client->fd, poll_fds, poll_fds_num, clients, client_index);
+            free(url);
             return 1;
         }
         printf("Socket successfully created..\n");
@@ -240,19 +230,11 @@ int receive_from_client(struct client* client, int client_index, struct pollfd* 
         }
         if (poll_index < 0 || server_index < 0) {
             fprintf(stderr, "too many connections\n");
+            free(url);
             return 1;
         }
-//        servers[server_index].clients[servers[server_index].clients_num++] = client;
         servers[server_index].response->clients[servers[server_index].response->clients_num++] = client;
-        char* url = (char*) malloc(clients->request.path_len * sizeof(char));
-        if (url == NULL) {
-            perror("malloc failed");
-            close_client(client->fd, poll_fds, poll_fds_num, clients, client_index);
-            return 1;
-        }
-        strncpy(url, clients->request.path, clients->request.path_len);
-        hashmap_set(cache,
-                    &(struct cached_response) {.url = url, .response = servers[server_index].response});
+        add_response_to_cache(cache, url, servers[server_index].response);
         client->response = servers[server_index].response;
         poll_fds[client->poll_index].events = 0;
     }
@@ -263,8 +245,12 @@ int send_to_client(struct client* client, int client_index, struct pollfd* poll_
                    struct client* clients) {
     ssize_t return_value;
     printf("Bytes written: %zd\nBuffer length: %zu\n", client->bytes_written, client->response->buf_len);
+    int to_write = client->response->buf_len - client->bytes_written;
+    if (to_write > WRITE_BUFFER_SIZE) {
+        to_write = WRITE_BUFFER_SIZE;
+    }
     while ((return_value = write(client->fd, client->response->buf + client->bytes_written,
-                                 client->response->buf_len - client->bytes_written)) == -1 &&
+                                 to_write)) == -1 &&
            errno == EINTR);
     if (return_value < 0) {
         perror("write to client");
@@ -274,7 +260,9 @@ int send_to_client(struct client* client, int client_index, struct pollfd* poll_
         return 1;
     }
     client->bytes_written += return_value;
-    poll_fds[client->poll_index].events = 0;
+    if (client->response->buf_len == client->bytes_written) {
+        poll_fds[client->poll_index].events = 0;
+    }
     if (return_value == 0) {
         printf("Send request to the client\n");
         printf("Total bytes written: %zd\n", client->bytes_written);
@@ -364,7 +352,6 @@ int receive_from_server(struct server* server, int server_index, struct pollfd* 
     }
     if (return_value == 0) {
         for (int k = 0; k < server->response->clients_num; k++) {
-//            printf("Client POLLOUT\n");
             poll_fds[server->response->clients[k]->poll_index].events = POLLOUT;
         }
         printf("Response length: %zu\n", server->response->buf_len);
@@ -426,31 +413,9 @@ int receive_from_server(struct server* server, int server_index, struct pollfd* 
             printf("Not content length: %d\n", server->response->not_content_length);
         }
     }
-//        if (parse_result == -1) {
-//            fprintf(stderr, "response is too long\n");
-//            for (int k = 0; k < server->response->clients_num; k++) {
-//                close_client(server->response->clients[k]->fd, poll_fds, poll_fds_num, clients, -1);
-//            }
-//            close_server(server->fd, poll_fds, poll_fds_num, servers, server_index);
-//            return 1;
-//        }
     for (int k = 0; k < server->response->clients_num; k++) {
-//        printf("Client POLLOUT\n");
         poll_fds[server->response->clients[k]->poll_index].events = POLLOUT;
     }
-//        if (parse_result == 2) {
-//            printf("Read now: %zd\n", return_value);
-//
-//        } else {
-//            for (int k = 0; k < server->response->clients_num; k++) {
-//                printf("Client POLLOUT\n");
-//                poll_fds[server->response->clients[k]->poll_index].events = POLLOUT;
-//            }
-//            printf("Response length: %zu\n", server->response->buf_len);
-//            printf("\nResponse:\n%.*s\n", (int) server->response->buf_len, server->response->buf);
-//            close_server(server->fd, poll_fds, poll_fds_num, servers, server_index);
-//        }
-
     return 0;
 }
 
@@ -460,13 +425,10 @@ int process_servers(struct pollfd* poll_fds, size_t poll_fds_num, struct client*
         struct server* server = &servers[i];
         if (server->fd != -1 && !server->processed) {
             if ((poll_fds[server->poll_index].revents & (POLLOUT | POLLHUP)) == (POLLOUT | POLLHUP)) {
-//                printf("connect_to_server\n");
                 connect_to_server(server, i, poll_fds, poll_fds_num, servers);
             } else if ((poll_fds[server->poll_index].revents & POLLOUT) == POLLOUT) {
-//                printf("send_to_server\n");
                 send_to_server(server, i, poll_fds, poll_fds_num, servers);
             } else if ((poll_fds[server->poll_index].revents & POLLIN) == POLLIN) {
-//                printf("receive_from_server\n");
                 receive_from_server(server, i, poll_fds, poll_fds_num, clients, servers);
             }
         }
@@ -506,7 +468,6 @@ int process_signal(struct pollfd poll_socket_fd) {
             return 2;
         }
         if (signal_fd_info.ssi_signo == SIGINT) {
-//            printf("Got SIGINT\n");
             return 1;
         } else {
             printf("Read unexpected signal\n");
@@ -611,13 +572,11 @@ int main(int argc, char* argv[]) {
         error = 1;
         goto CLEANUP;
     }
-    cache = hashmap_new(sizeof(struct cached_response), 0, 0, 0,
-                        cached_response_hash, cached_response_compare, NULL, NULL);
+    init_cache(&cache);
     sigset_t mask;
     sigemptyset(&mask);
     sigaddset(&mask, SIGINT);
     int iter = 0;
-//    while (iter < 200) {
     while (1) {
         printf("\n%d.\n", iter++);
         int poll_return = ppoll(poll_fds, poll_fds_num, NULL, &mask);
@@ -656,7 +615,7 @@ int main(int argc, char* argv[]) {
     CLEANUP:
     free_clients(clients, clients_size);
     close_all(poll_fds, poll_fds_num);
-    free_cache();
+    free_cache(cache);
     if (error) {
         return EXIT_FAILURE;
     }
