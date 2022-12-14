@@ -402,14 +402,6 @@ void addFdToPollFds(int sock_fd, short events) {
     poll_last_index += 1;
 }
 
-void changeEventForFd(int fd, short new_events) {
-    for (int i = 0; i < poll_last_index; i++) {
-        if (poll_fds[i].fd == fd) {
-            poll_fds[i].events = new_events;
-        }
-    }
-}
-
 int connectToServerHost(char *hostname, int port) {
     if (hostname == NULL || port < 0) {
         return -1;
@@ -484,6 +476,14 @@ void acceptNewClient(int listen_fd) {
     int index = findFreeClient(new_client_fd);
     addFdToPollFds(new_client_fd, POLLIN);
     fprintf(stderr, "new client %d accepted\n", index);
+}
+
+void changeEventForFd(int fd, short new_events) {
+    for (int i = 0; i < poll_last_index; i++) {
+        if (poll_fds[i].fd == fd) {
+            poll_fds[i].events = new_events;
+        }
+    }
 }
 
 void removeSubscriber(int client_num, int cache_index) {
@@ -744,7 +744,6 @@ void readFromClient(int client_num) {
         clients[client_num].write_response_index = 0;
         addFdToPollFds(server_fd, POLLIN | POLLOUT);
         free(host);
-        shiftRequest(client_num, pret);
     }
     else if (pret == -1) {
         disconnectClient(client_num);
