@@ -7,65 +7,81 @@
 
 #define NUMBER_OF_MUTEXES 3
 #define NUMBER_OF_ITERATIONS 10
+#define SUCCESS 0
 pthread_mutex_t mutexes[NUMBER_OF_MUTEXES];
 
 typedef struct {
 	char* thread_name;
 } thread_args;
 
+typedef int error_t;
+
 bool second_thread_is_ready = false;
 
-void destroy_mutex(int mutex_id) {
-	int error = pthread_mutex_destroy(&mutexes[mutex_id]);
+error_t destroy_mutex(int mutex_id) {
+	error_t error = pthread_mutex_destroy(&mutexes[mutex_id]);
 	if (error != 0) {
 		fprintf(stderr, "Error while destroying mutex %d: %s\n", mutex_id, strerror(error));
-		exit(EXIT_FAILURE);
+		return error;
 	}
+	return SUCCESS;
 }
 
-void destroy_mutexes() {
+error_t destroy_mutexes() {
 	for (int i = 0; i < NUMBER_OF_MUTEXES; ++i) {
-		destroy_mutex(i);
+		error_t error = destroy_mutex(i);
+		if (error != SUCCESS) {
+			return error;
+		}
 	}
+	return SUCCESS;
 }
 
-void lock_mutex(int mutex_id) {
-	int error = pthread_mutex_lock(&mutexes[mutex_id]);
+error_t lock_mutex(int mutex_id) {
+	error_t error = pthread_mutex_lock(&mutexes[mutex_id]);
 	if (error != 0) {
 		fprintf(stderr, "Error while locking mutex %d: %s\n", mutex_id, strerror(error));
-		destroy_mutexes();
-		exit(EXIT_FAILURE);
+		return error;
 	}
+	return SUCCESS;
 }
 
-void unlock_mutex(int mutex_id) {
-	int error = pthread_mutex_unlock(&mutexes[mutex_id]);
+error_t unlock_mutex(int mutex_id) {
+	error_t error = pthread_mutex_unlock(&mutexes[mutex_id]);
 	if (error != 0) {
 		fprintf(stderr, "Error while unlocking mutex %d: %s\n", mutex_id, strerror(error));
-		destroy_mutexes();
-		exit(EXIT_FAILURE);
+		return error;
 	}
+	return SUCCESS;
 }
 
-void init_mutexes() {
+error_t init_mutexes() {
 	pthread_mutexattr_t attr;
-	if (pthread_mutexattr_init(&attr) != 0) {
+	error_t error;
+	error = pthread_mutexattr_init(&attr);
+	if (error != SUCCESS) {
 		perror("pthread_mutexattr_init");
-		exit(EXIT_FAILURE);
+		return error;
 	}
 
-	if (pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK) != 0) {
+	error = pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_ERRORCHECK);
+	if (error != SUCCESS) {
+		pthread_mutexattr_destroy(&attr);
 		perror("pthread_mutexattr_settype");
-		exit(EXIT_FAILURE);
+		return error;
 	}
 
 	for (int i = 0; i < NUMBER_OF_MUTEXES; ++i) {
-		if (pthread_mutex_init(&mutexes[i], &attr) != 0) {
+		error = pthread_mutex_init(&mutexes[i], &attr);
+		if (error != 0) {
 			perror("pthread_mutex_init");
 			for (int j = 0; j < i; ++j) {
-				destroy_mutex(j);
+				if (destroy_mutex(j) != SUCCESS) {
+					break;
+				}
 			}
-			exit(EXIT_FAILURE);
+			pthread_mutexattr_destroy(&attr);
+			return error;
 		}
 	}
 	/*
@@ -73,10 +89,12 @@ void init_mutexes() {
 	 * any function affecting the attributes object (including destruction)
 	 * shall not affect any previously initialized mutexes
 	 */
-	if (pthread_mutexattr_destroy(&attr) != 0) {
+	error = pthread_mutexattr_destroy(&attr);
+	if (error != 0) {
 		perror("pthread_mutexattr_destroy");
-		exit(EXIT_FAILURE);
+		return error;
 	}
+	return SUCCESS;
 }
 
 void wait_for_other_thread() {
@@ -87,19 +105,30 @@ void wait_for_other_thread() {
 
 void* printing_function(void* args) {
 	char* thread_name = ((thread_args*)args)->thread_name;
-	int current_mutex = 0, next_mutex = 1;
+	int current_mutex = 0;
+	int next_mutex = 1;
+	error_t error;
 
 	if (!second_thread_is_ready) {
 		second_thread_is_ready = true;
 		current_mutex = 2;
 		next_mutex = 0;
-		lock_mutex(current_mutex);
+		error = lock_mutex(current_mutex);
+		if (error != SUCCESS) {
+			pthread_exit(NULL);
+		}
 	}
 
 	for (int i = 0; i < NUMBER_OF_ITERATIONS; ++i) {
-		lock_mutex(next_mutex);
+		error = lock_mutex(next_mutex);
+		if (error != SUCCESS) {
+			pthread_exit(NULL);
+		}
 		printf("%d %s\n", i, thread_name);
-		unlock_mutex(current_mutex);
+		error = unlock_mutex(current_mutex);
+		if (error != SUCCESS) {
+			pthread_exit(NULL);
+		}
 
 		current_mutex = next_mutex;
 		next_mutex = (current_mutex + 1) % NUMBER_OF_MUTEXES;
@@ -110,8 +139,12 @@ void* printing_function(void* args) {
 }
 
 int main() {
-	init_mutexes();
-	lock_mutex(0);
+	if (init_mutexes() != SUCCESS) {
+		return EXIT_FAILURE;
+	}
+	if (lock_mutex(0) != SUCCESS) {
+		return EXIT_FAILURE;
+	}
 	pthread_t thread;
 	thread_args child_args;
 	child_args.thread_name = "Child";
