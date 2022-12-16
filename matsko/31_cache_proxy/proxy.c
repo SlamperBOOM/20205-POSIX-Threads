@@ -545,7 +545,7 @@ void addSubscriber(int client_num, int cache_index) {
     size_t prev_index = cache_table[cache_index].SUBSCRIBERS_SIZE;
     cache_table[cache_index].SUBSCRIBERS_SIZE *= 2;
     cache_table[cache_index].subscribers = realloc(cache_table[cache_index].subscribers,
-                                                   cache_table[cache_index].SUBSCRIBERS_SIZE);
+                                                   cache_table[cache_index].SUBSCRIBERS_SIZE * sizeof(int));
     for (size_t i = prev_index; i < cache_table[cache_index].SUBSCRIBERS_SIZE; i++) {
         cache_table[cache_index].subscribers[i] = -1;
     }
