@@ -29,7 +29,7 @@
 #define START_RESPONSE_SIZE BUFSIZ
 
 
-size_t POLL_TABLE_SIZE = 10;
+size_t POLL_TABLE_SIZE = 32;
 int poll_last_index = -1;
 struct pollfd *poll_fds;
 
@@ -117,7 +117,7 @@ typedef struct client {
     int fd;
 } client_t;
 
-size_t CLIENTS_SIZE = 2;
+size_t CLIENTS_SIZE = 16;
 client_t *clients;
 bool valid_clients = false;
 
@@ -146,7 +146,7 @@ typedef struct server {
     int write_request_index;
 } server_t;
 
-size_t SERVERS_SIZE = 2;
+size_t SERVERS_SIZE = 8;
 server_t *servers;
 bool valid_servers = false;
 
@@ -338,6 +338,7 @@ void initCacheTable() {
 void reallocCacheTable() {
     size_t prev_size = CACHE_SIZE;
     CACHE_SIZE *= 2;
+    fprintf(stderr, "realloc cache, new expected cache %lu\n", CACHE_SIZE);
     cache_table = realloc(cache_table, CACHE_SIZE * sizeof(cache_t));
     for (size_t i = prev_size; i < CACHE_SIZE; i++) {
         initEmptyCache(i);
@@ -451,7 +452,7 @@ int initListener(int port) {
         exit(ERROR_BIND);
     }
 
-    int listen_res = listen(listen_fd, 10);
+    int listen_res = listen(listen_fd, (int)CLIENTS_SIZE);
     if (listen_res == -1) {
         perror("listen");
         close(listen_fd);
@@ -637,6 +638,7 @@ void readFromClient(int client_num) {
         return;
     }
     else if (was_read == 0) {
+        fprintf(stderr, "client %d closed connection\n", client_num);
         disconnectClient(client_num);
         return;
     }
@@ -783,6 +785,10 @@ void readFromServer(int server_num) {
     }
     else if (was_read == 0) {
         cache_table[servers[server_num].cache_index].full = true;
+        cache_table[servers[server_num].cache_index].response = realloc(
+                cache_table[servers[server_num].cache_index].response,
+                cache_table[servers[server_num].cache_index].response_index);
+        cache_table[servers[server_num].cache_index].RESPONSE_SIZE = cache_table[servers[server_num].cache_index].response_index;
         notifySubscribers(servers[server_num].cache_index, POLLIN | POLLOUT);
         disconnectServer(server_num);
         return;
