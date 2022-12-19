@@ -5,25 +5,28 @@
 #define INC_31_CACHE_H
 
 
-struct cached_response {
+struct cache_node {
     struct response* response;
     char* url;
+    int empty;
 };
 
 struct cache {
-    struct hashmap* map;
+    struct cache_node* nodes;
+    int last_node_set;
+    size_t size;
 };
-
-int cached_response_compare(const void* a, const void* b, void* udata);
-
-uint64_t cached_response_hash(const void* item, uint64_t seed0, uint64_t seed1);
 
 void free_cache(struct cache cache);
 
-void init_cache(struct cache* cache);
+void free_cache_node(struct cache_node cache_node);
 
-struct cached_response* get_cached_response(struct cache cache, char* url);
+int init_cache(struct cache* cache, size_t size);
 
-void add_response_to_cache(struct cache cache, char* url, struct response* response);
+int init_cache_node(struct cache_node* cache_node);
+
+struct cache_node* get(struct cache cache, char* url);
+
+size_t set(struct cache* cache, char* url);
 
 #endif //INC_31_CACHE_H

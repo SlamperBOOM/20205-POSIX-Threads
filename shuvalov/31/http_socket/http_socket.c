@@ -77,32 +77,7 @@ int setup_server(size_t index, struct server* servers) {
     servers[index].processed = 0;
     servers[index].bytes_written = 0;
     servers[index].request = NULL;
-    servers[index].response = (struct response*) malloc(sizeof(struct response));
-    if (servers[index].response == NULL) {
-        return -1;
-    }
-    servers[index].response->in_cache = 0;
-    servers[index].response->clients_num = 0;
-    servers[index].response->buf_size = BUF_SIZE;
-    servers[index].response->buf_len = 0;
-    servers[index].response->content_length = -1;
-    servers[index].response->not_content_length = -1;
-    servers[index].response->buf = (char*) malloc(sizeof(char) * servers[index].response->buf_size);
-    if (servers[index].response->buf == NULL) {
-        return -1;
-    }
-    servers[index].response->headers_max_size = 100;
-    servers[index].response->headers = (struct phr_header*) malloc(
-            servers[index].response->headers_max_size * sizeof(struct phr_header));
-    if (servers[index].response->headers == NULL) {
-        return -1;
-    }
-    servers[index].response->subscribers_max_size = 100;
-    servers[index].response->subscribers = (struct client**) malloc(
-            sizeof(struct client*) * servers[index].response->subscribers_max_size);
-    if (servers[index].response->subscribers == NULL) {
-        return -1;
-    }
+    servers[index].response = NULL;
     return 0;
 }
 
@@ -111,17 +86,6 @@ void free_clients(struct client* clients, size_t clients_num) {
         if (clients[i].request.buf != NULL) {
             free(clients[i].request.buf);
             free(clients[i].request.headers);
-        }
-    }
-}
-
-void free_servers(struct server* servers, size_t servers_num) {
-    for (int i = 0; i < servers_num; i++) {
-        if (servers[i].response != NULL && servers[i].response->in_cache == 0) {
-            free(servers[i].response->buf);
-            free(servers[i].response->headers);
-            free(servers[i].response->subscribers);
-            free(servers[i].response);
         }
     }
 }

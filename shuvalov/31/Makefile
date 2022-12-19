@@ -1,2 +1,2 @@
-proxy: proxy.c socket_operations/socket_operations.c http_socket/hashmap/hashmap.c http_socket/cache.c http_socket/http_socket.c http_socket/picohttpparser/picohttpparser.c
-	clang -DLOG_USE_COLOR -Wall -pedantic -fsanitize=address proxy.c log/src/log.c socket_operations/socket_operations.c http_socket/hashmap/hashmap.c http_socket/cache.c http_socket/http_socket.c http_socket/picohttpparser/picohttpparser.c -o proxy
+proxy: proxy.c socket_operations/socket_operations.c http_socket/cache.c http_socket/http_socket.c http_socket/picohttpparser/picohttpparser.c
+	clang -DLOG_USE_COLOR -Wall -pedantic -fsanitize=address proxy.c log/src/log.c socket_operations/socket_operations.c http_socket/cache.c http_socket/http_socket.c http_socket/picohttpparser/picohttpparser.c -o proxy

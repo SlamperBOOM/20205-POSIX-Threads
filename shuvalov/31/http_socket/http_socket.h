@@ -54,8 +54,6 @@ int setup_server(size_t index, struct server* servers);
 
 void free_clients(struct client* clients, size_t clients_num);
 
-void free_servers(struct server* servers, size_t servers_num);
-
 int add_fd_to_clients(int fd, size_t poll_index, struct client* clients, size_t clients_size);
 
 int add_fd_to_servers(int fd, struct sockaddr_in serv_addr,
