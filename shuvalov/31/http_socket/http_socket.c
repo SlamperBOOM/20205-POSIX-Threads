@@ -18,12 +18,10 @@ int init_clients(struct client* clients, size_t size) {
 int init_client(struct client* client) {
     client->request.buf = (char*) malloc(client->request.buf_size * sizeof(char));
     if (client->request.buf == NULL) {
-        perror("malloc failed");
         return -1;
     }
     client->request.headers = (struct phr_header*) malloc(client->request.headers_max_size * sizeof(*client->request.headers));
     if (client->request.headers == NULL) {
-        perror("malloc failed");
         return -1;
     }
     return 0;
@@ -55,7 +53,6 @@ int setup_server(size_t index, struct server* servers) {
     servers[index].bytes_written = 0;
     servers[index].response = (struct response*) malloc(sizeof(struct response));
     if (servers[index].response == NULL) {
-        perror("malloc failed");
         return -1;
     }
     servers[index].response->in_cache = 0;
@@ -66,20 +63,17 @@ int setup_server(size_t index, struct server* servers) {
     servers[index].response->not_content_length = -1;
     servers[index].response->buf = (char*) malloc(sizeof(char) * servers[index].response->buf_size);
     if (servers[index].response->buf == NULL) {
-        perror("malloc failed");
         return -1;
     }
     servers[index].request = NULL;
     servers[index].response->headers_max_size = 100;
     servers[index].response->headers = (struct phr_header*) malloc(servers[index].response->headers_max_size * sizeof(struct phr_header));
     if (servers[index].response->headers == NULL) {
-        perror("malloc failed");
         return -1;
     }
     servers[index].response->clients_max_size = 100;
     servers[index].response->clients = (struct client**) malloc(sizeof(struct client*) * servers[index].response->clients_max_size);
     if (servers[index].response->clients == NULL) {
-        perror("malloc failed");
         return -1;
     }
     return 0;
@@ -108,7 +102,6 @@ void free_servers(struct server* servers, size_t servers_num) {
 int add_fd_to_clients(int fd, size_t poll_index, struct client* clients, size_t clients_size) {
     for (int i = 0; i < clients_size; i++) {
         if (clients[i].fd == -1) {
-            printf("Add fd to clients %d\n", i);
             clients[i].fd = fd;
             clients[i].processed = 1;
             clients[i].poll_index = poll_index;
@@ -141,7 +134,6 @@ ssize_t get_header_value(char** value, size_t* value_len, char* header_name,
             *value_len = headers[i].value_len;
             *value = (char*) malloc(sizeof(char) * *value_len);
             if (*value == NULL) {
-                perror("malloc");
                 return 2;
             }
             strncpy(*value, headers[i].value, *value_len);
