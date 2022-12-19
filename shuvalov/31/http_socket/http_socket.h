@@ -14,10 +14,10 @@ struct request {
 };
 
 struct response {
-    struct client** clients;
+    struct client** subscribers;
     char* buf, * message;
     struct phr_header* headers;
-    size_t buf_size, buf_len, prev_buf_len, message_len, num_headers, clients_max_size, headers_max_size;
+    size_t buf_size, buf_len, prev_buf_len, message_len, num_headers, subscribers_max_size, headers_max_size;
     int minor_version, status, clients_num, content_length, not_content_length, in_cache;
 };
 
@@ -37,6 +37,10 @@ struct server {
     ssize_t bytes_written;
     int fd, processed;
 };
+
+int parse_request(struct request* request);
+
+int parse_response(struct response* response);
 
 int init_client(struct client* client);
 

@@ -4,6 +4,30 @@
 
 #define BUF_SIZE 4096
 
+int parse_request(struct request* request) {
+    return phr_parse_request(request->buf,
+                             request->buf_len,
+                             (const char**) &request->method,
+                             &request->method_len,
+                             (const char**) &request->path,
+                             &request->path_len,
+                             &request->minor_version,
+                             request->headers,
+                             &request->num_headers,
+                             request->prev_buf_len);
+}
+
+int parse_response(struct response* response) {
+    return phr_parse_response(response->buf,
+                              response->buf_len,
+                              &response->minor_version,
+                              &response->status,
+                              (const char**) &response->message,
+                              &response->message_len,
+                              response->headers,
+                              &response->num_headers,
+                              response->prev_buf_len);
+}
 
 int init_clients(struct client* clients, size_t size) {
     for (int i = 0; i < size; i++) {
@@ -20,7 +44,8 @@ int init_client(struct client* client) {
     if (client->request.buf == NULL) {
         return -1;
     }
-    client->request.headers = (struct phr_header*) malloc(client->request.headers_max_size * sizeof(*client->request.headers));
+    client->request.headers = (struct phr_header*) malloc(
+            client->request.headers_max_size * sizeof(*client->request.headers));
     if (client->request.headers == NULL) {
         return -1;
     }
@@ -51,6 +76,7 @@ int setup_server(size_t index, struct server* servers) {
     servers[index].fd = -1;
     servers[index].processed = 0;
     servers[index].bytes_written = 0;
+    servers[index].request = NULL;
     servers[index].response = (struct response*) malloc(sizeof(struct response));
     if (servers[index].response == NULL) {
         return -1;
@@ -65,15 +91,16 @@ int setup_server(size_t index, struct server* servers) {
     if (servers[index].response->buf == NULL) {
         return -1;
     }
-    servers[index].request = NULL;
     servers[index].response->headers_max_size = 100;
-    servers[index].response->headers = (struct phr_header*) malloc(servers[index].response->headers_max_size * sizeof(struct phr_header));
+    servers[index].response->headers = (struct phr_header*) malloc(
+            servers[index].response->headers_max_size * sizeof(struct phr_header));
     if (servers[index].response->headers == NULL) {
         return -1;
     }
-    servers[index].response->clients_max_size = 100;
-    servers[index].response->clients = (struct client**) malloc(sizeof(struct client*) * servers[index].response->clients_max_size);
-    if (servers[index].response->clients == NULL) {
+    servers[index].response->subscribers_max_size = 100;
+    servers[index].response->subscribers = (struct client**) malloc(
+            sizeof(struct client*) * servers[index].response->subscribers_max_size);
+    if (servers[index].response->subscribers == NULL) {
         return -1;
     }
     return 0;
@@ -93,7 +120,7 @@ void free_servers(struct server* servers, size_t servers_num) {
         if (servers[i].response != NULL && servers[i].response->in_cache == 0) {
             free(servers[i].response->buf);
             free(servers[i].response->headers);
-            free(servers[i].response->clients);
+            free(servers[i].response->subscribers);
             free(servers[i].response);
         }
     }

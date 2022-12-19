@@ -22,7 +22,7 @@ void free_cache(struct cache cache) {
             struct cached_response* cached_response = item;
             free(cached_response->url);
             free(cached_response->response->buf);
-            free(cached_response->response->clients);
+            free(cached_response->response->subscribers);
             free(cached_response->response->headers);
             free(cached_response->response);
         }
