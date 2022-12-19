@@ -19,8 +19,11 @@ void free_cache(struct cache cache) {
         size_t iter = 0;
         void* item;
         while (hashmap_iter(cache.map, &iter, &item)) {
-            const struct cached_response* cached_response = item;
+            struct cached_response* cached_response = item;
             free(cached_response->url);
+            free(cached_response->response->buf);
+            free(cached_response->response->clients);
+            free(cached_response->response->headers);
             free(cached_response->response);
         }
         hashmap_free(cache.map);
@@ -40,5 +43,5 @@ struct cached_response* get_cached_response(struct cache cache, char* url) {
 void add_response_to_cache(struct cache cache, char* url, struct response* response) {
     hashmap_set(cache.map,
                 &(struct cached_response) {.url = url, .response = response});
+    response->in_cache = 1;
 }
-

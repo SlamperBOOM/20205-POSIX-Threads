@@ -8,7 +8,9 @@
 //      containing send, receive and hostname_to_ip functions
 //  2. Make http client
 
-int hostname_to_ip(char* hostname, char* ip);
+int buffer_to_string(char* buffer, size_t size, char** string);
+
+int hostname_to_ip(char* hostname, size_t hostname_len, char* ip);
 
 ssize_t write_all(int sock, const char* buf, size_t buf_len);
 

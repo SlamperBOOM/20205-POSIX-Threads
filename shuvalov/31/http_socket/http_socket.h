@@ -8,17 +8,17 @@
 
 struct request {
     char* buf, * method, * path;
-    struct phr_header headers[100];
-    size_t buf_size, buf_len, prev_buf_len, method_len, path_len, num_headers;
+    struct phr_header* headers;
+    size_t buf_size, buf_len, prev_buf_len, method_len, path_len, num_headers, headers_max_size;
     int minor_version;
 };
 
 struct response {
-    struct client* clients[100];
+    struct client** clients;
     char* buf, * message;
-    struct phr_header headers[100];
-    size_t buf_size, buf_len, prev_buf_len, message_len, num_headers;
-    int minor_version, status, clients_num, content_length, not_content_length;
+    struct phr_header* headers;
+    size_t buf_size, buf_len, prev_buf_len, message_len, num_headers, clients_max_size, headers_max_size;
+    int minor_version, status, clients_num, content_length, not_content_length, in_cache;
 };
 
 struct client {
@@ -38,11 +38,19 @@ struct server {
     int fd, processed;
 };
 
-void setup_client(int index, struct client* clients);
+int init_client(struct client* client);
 
-int setup_server(int index, struct server* servers);
+int init_clients(struct client* clients, size_t size);
 
-void free_clients(struct client* clients, size_t servers_num);
+int init_servers(struct server* servers, size_t size);
+
+void setup_client(size_t index, struct client* clients);
+
+int setup_server(size_t index, struct server* servers);
+
+void free_clients(struct client* clients, size_t clients_num);
+
+void free_servers(struct server* servers, size_t servers_num);
 
 int add_fd_to_clients(int fd, size_t poll_index, struct client* clients, size_t clients_size);
 

@@ -3,24 +3,43 @@
 #include <arpa/inet.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <malloc.h>
 #include "socket_operations.h"
 
-int hostname_to_ip(char* hostname, char* ip) {
+int buffer_to_string(char* buffer, size_t size, char** string) {
+    *string = (char*) malloc((size + 1) * sizeof(**string));
+    if (string == NULL) {
+        perror("malloc failed");
+        return -1;
+    }
+    strncpy(*string, buffer, size);
+    (*string)[size] = '\0';
+    return 0;
+}
+
+int hostname_to_ip(char* hostname, size_t hostname_len, char* ip) {
+    char* hostname_str = NULL;
+    int return_value = buffer_to_string(hostname, hostname_len, &hostname_str);
+    if (return_value != 0) {
+        return -1;
+    }
     struct addrinfo hints, * servinfo;
     struct sockaddr_in* h;
     int rv;
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
-    if ((rv = getaddrinfo(hostname, "http", &hints, &servinfo)) != 0) {
+    if ((rv = getaddrinfo(hostname_str, "http", &hints, &servinfo)) != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
-        return 1;
+        free(hostname_str);
+        return -1;
     }
     for (struct addrinfo* p = servinfo; p != NULL; p = p->ai_next) {
         h = (struct sockaddr_in*) p->ai_addr;
         strcpy(ip, inet_ntoa(h->sin_addr));
     }
     freeaddrinfo(servinfo);
+    free(hostname_str);
     return 0;
 }
 
