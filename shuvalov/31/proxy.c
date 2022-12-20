@@ -256,6 +256,11 @@ int send_to_client(struct client* client, size_t client_index, struct pollfd* po
          client->response->content_length != 1 && client->response->not_content_length != 1) ||
         return_value == 0) {
         unsubscribe(client);
+        if (client->response->status != 200) {
+            if (client->cache_node >= 0) {
+                clear_cache_node(&(cache.nodes[client->cache_node]));
+            }
+        }
         close(client->fd);
         remove_from_poll(client->fd, poll_fds, poll_fds_num);
         setup_client(client_index, clients);

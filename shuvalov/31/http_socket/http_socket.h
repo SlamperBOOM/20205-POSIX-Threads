@@ -27,6 +27,7 @@ struct client {
     size_t poll_index;
     ssize_t bytes_written;
     int fd, processed;
+    int cache_node;
 };
 
 struct server {

@@ -54,6 +54,7 @@ int init_client(struct client* client) {
 
 void setup_client(size_t index, struct client* clients) {
     clients[index].fd = -1;
+    clients[index].cache_node = -1;
     clients[index].processed = 0;
     clients[index].request.buf_size = BUF_SIZE;
     clients[index].request.headers_max_size = 100;

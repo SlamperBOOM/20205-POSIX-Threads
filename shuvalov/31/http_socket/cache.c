@@ -10,6 +10,7 @@ void subscribe(struct client* client, struct cache* cache, size_t cache_index) {
     for (int i = 0; i < response->subscribers_max_size; i++) {
         if (response->subscribers[i] == NULL) {
             response->subscribers[i] = client;
+            client->cache_node = i;
         }
     }
     response->subscribers_count++;

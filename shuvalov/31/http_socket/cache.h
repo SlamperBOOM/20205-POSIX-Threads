@@ -27,6 +27,8 @@ struct client* get_subscriber(struct server server, size_t index);
 
 size_t get_subscribers_count(struct server server);
 
+void clear_cache_node(struct cache_node* cache_node);
+
 void free_cache(struct cache cache);
 
 void free_cache_node(struct cache_node cache_node);
