@@ -4,6 +4,41 @@
 
 #define BUF_SIZE 4096
 
+
+void subscribe(struct client* client, struct cache* cache, size_t cache_index) {
+    struct response* response = cache->nodes[cache_index].response;
+    for (int i = 0; i < response->subscribers_max_size; i++) {
+        if (response->subscribers[i] == NULL) {
+            response->subscribers[i] = client;
+        }
+    }
+    response->subscribers_count++;
+    client->response = response;
+}
+
+void unsubscribe(struct client* client) {
+    struct response* response = client->response;
+    for (int i = 0; i < response->subscribers_max_size; i++) {
+        if (response->subscribers[i] != NULL && response->subscribers[i]->fd == client->fd) {
+            response->subscribers[i] = NULL;
+        }
+    }
+    client->response->subscribers_count--;
+}
+
+struct client* get_subscriber(struct server server, size_t index) {
+    return server.response->subscribers[index];
+}
+
+size_t get_subscribers_count(struct server server) {
+    return server.response->subscribers_count;
+}
+
+void make_publisher(struct server* server, struct cache* cache, size_t cache_index) {
+    struct response* response = cache->nodes[cache_index].response;
+    server->response = response;
+}
+
 void free_cache(struct cache cache) {
     if (cache.nodes != NULL) {
         for (int i = 0; i < cache.size; i++) {
@@ -47,7 +82,7 @@ int init_cache_node(struct cache_node* cache_node) {
         return -1;
     }
     cache_node->response->in_cache = 0;
-    cache_node->response->clients_num = 0;
+    cache_node->response->subscribers_count = 0;
     cache_node->response->buf_size = BUF_SIZE;
     cache_node->response->buf_len = 0;
     cache_node->response->content_length = -1;
@@ -68,6 +103,9 @@ int init_cache_node(struct cache_node* cache_node) {
     if (cache_node->response->subscribers == NULL) {
         return -1;
     }
+    for (int i = 0; i < cache_node->response->subscribers_max_size; i++) {
+        cache_node->response->subscribers[i] = NULL;
+    }
     return 0;
 }
 
@@ -78,7 +116,7 @@ void clear_cache_node(struct cache_node* cache_node) {
     }
     cache_node->url = NULL;
     cache_node->response->in_cache = 0;
-    cache_node->response->clients_num = 0;
+    cache_node->response->subscribers_count = 0;
     cache_node->response->buf_size = BUF_SIZE;
     cache_node->response->buf_len = 0;
     cache_node->response->content_length = -1;

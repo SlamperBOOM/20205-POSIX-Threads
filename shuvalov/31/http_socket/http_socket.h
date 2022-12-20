@@ -18,7 +18,7 @@ struct response {
     char* buf, * message;
     struct phr_header* headers;
     size_t buf_size, buf_len, prev_buf_len, message_len, num_headers, subscribers_max_size, headers_max_size;
-    int minor_version, status, clients_num, content_length, not_content_length, in_cache;
+    int minor_version, status, subscribers_count, content_length, not_content_length, in_cache;
 };
 
 struct client {

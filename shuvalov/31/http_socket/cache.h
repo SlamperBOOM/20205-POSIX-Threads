@@ -17,6 +17,16 @@ struct cache {
     size_t size;
 };
 
+void subscribe(struct client* client, struct cache* cache, size_t cache_index);
+
+void make_publisher(struct server* server, struct cache* cache, size_t cache_index);
+
+void unsubscribe(struct client* client);
+
+struct client* get_subscriber(struct server server, size_t index);
+
+size_t get_subscribers_count(struct server server);
+
 void free_cache(struct cache cache);
 
 void free_cache_node(struct cache_node cache_node);

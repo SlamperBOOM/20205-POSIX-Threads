@@ -158,7 +158,7 @@ int receive_from_client(struct client* client, size_t client_index, struct pollf
         }
         struct cache_node* cache_node = get(cache, url);
         if (cache_node != NULL) {
-            cache_node->response->subscribers[cache_node->response->clients_num++] = client;
+            cache_node->response->subscribers[cache_node->response->subscribers_count++] = client;
             client->response = cache_node->response;
             if (cache_node->response->buf_len > 0) {
                 poll_fds[client->poll_index].events = POLLOUT;
@@ -222,18 +222,12 @@ int receive_from_client(struct client* client, size_t client_index, struct pollf
         }
         log_debug("Server index %d", server_index);
         size_t cache_index = set(&cache, url);
-        struct response* response = cache.nodes[cache_index].response;
-        response->subscribers[response->clients_num++] = client;
-        client->response = response;
-        servers[server_index].response = response;
+        subscribe(client, &cache, cache_index);
+        make_publisher(&(servers[server_index]), &cache, cache_index);
         poll_fds[client->poll_index].events = 0;
         log_debug("Client poll_index %zu", servers[server_index].response->subscribers[0]->poll_index);
     }
     return 0;
-}
-
-void unsubscribe(struct client* client) {
-    client->response--;
 }
 
 int send_to_client(struct client* client, size_t client_index, struct pollfd* poll_fds, size_t poll_fds_num,
@@ -348,14 +342,14 @@ int receive_from_server(struct server* server, int server_index, struct pollfd* 
     log_debug("Receive %zd Kb", return_value);
     if (return_value < 0) {
         log_error("read from server: %s", strerror(errno));
-        for (int k = 0; k < server->response->clients_num; k++) {
+        for (int k = 0; k < server->response->subscribers_count; k++) {
             close_client(server->response->subscribers[k]->fd, poll_fds, poll_fds_num, clients, -1);
         }
         close_server(server->fd, poll_fds, poll_fds_num, servers, server_index);
         return 1;
     }
     if (return_value == 0) {
-        for (int k = 0; k < server->response->clients_num; k++) {
+        for (int k = 0; k < server->response->subscribers_count; k++) {
             poll_fds[server->response->subscribers[k]->poll_index].events = POLLOUT;
         }
         close_server(server->fd, poll_fds, poll_fds_num, servers, server_index);
@@ -368,7 +362,7 @@ int receive_from_server(struct server* server, int server_index, struct pollfd* 
         server->response->buf = (char*) realloc(server->response->buf, sizeof(char) * server->response->buf_size);
         if (server->response->buf == NULL) {
             log_error("realloc failed: %s", strerror(errno));
-            for (int k = 0; k < server->response->clients_num; k++) {
+            for (int k = 0; k < server->response->subscribers_count; k++) {
                 close_client(server->response->subscribers[k]->fd, poll_fds, poll_fds_num, clients, -1);
             }
             close_server(server->fd, poll_fds, poll_fds_num, servers, server_index);
@@ -390,7 +384,7 @@ int receive_from_server(struct server* server, int server_index, struct pollfd* 
             return_value = get_header_value(&content_length, &content_length_len, "Content-Length",
                                             server->response->headers, server->response->num_headers);
             if (return_value == 2) {
-                for (int k = 0; k < server->response->clients_num; k++) {
+                for (int k = 0; k < server->response->subscribers_count; k++) {
                     close_client(server->response->subscribers[k]->fd, poll_fds, poll_fds_num, clients, -1);
                 }
                 close_server(server->fd, poll_fds, poll_fds_num, servers, server_index);
@@ -418,8 +412,8 @@ int receive_from_server(struct server* server, int server_index, struct pollfd* 
             }
         }
     }
-    log_debug("Clients num %d", server->response->clients_num);
-    for (int k = 0; k < server->response->clients_num; k++) {
+    log_debug("Clients num %d", server->response->subscribers_count);
+    for (int k = 0; k < server->response->subscribers_count; k++) {
         poll_fds[server->response->subscribers[k]->poll_index].events = POLLOUT;
     }
     return 0;
