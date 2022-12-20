@@ -75,6 +75,7 @@ typedef struct cache {
     char *request;
     char *response;
     int *subscribers;
+    size_t URL_LEN;
     size_t SUBSCRIBERS_SIZE;
     size_t REQUEST_SIZE;
     size_t RESPONSE_SIZE;
@@ -315,6 +316,7 @@ void initEmptyCache(size_t i) {
     cache_table[i].subscribers = NULL;
     cache_table[i].full = false;
     cache_table[i].url = NULL;
+    cache_table[i].URL_LEN = 0;
     cache_table[i].SUBSCRIBERS_SIZE = 0;
     cache_table[i].server_index = -1;
     cache_table[i].private = true;
@@ -348,7 +350,7 @@ void reallocCacheTable() {
 int findAtCache(char *url, size_t url_size, bool *exists) {
     int free_cache_index = -1;
     for (int i = 0; i < CACHE_SIZE; i++) {
-        if (cache_table[i].valid && !cache_table[i].private &&
+        if (cache_table[i].valid && !cache_table[i].private && cache_table[i].URL_LEN == url_size &&
             strncmp(url, cache_table[i].url, url_size) == 0) {
             *exists = true;
             return i;
@@ -590,6 +592,7 @@ void freeCacheRecord(int cache_num) {
     if (cache_table[cache_num].url != NULL) {
         free(cache_table[cache_num].url);
         cache_table[cache_num].url = NULL;
+        cache_table[cache_num].URL_LEN = 0;
     }
     if (cache_table[cache_num].request != NULL) {
         free(cache_table[cache_num].request);
@@ -741,6 +744,7 @@ void readFromClient(int client_num) {
         cache_table[cache_index].server_index = server_num;
         addSubscriber(client_num, cache_index);
         cache_table[cache_index].url = url;
+        cache_table[cache_index].URL_LEN = url_len;
 
         clients[client_num].cache_index = cache_index;
         clients[client_num].write_response_index = 0;
