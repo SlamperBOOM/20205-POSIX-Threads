@@ -40,6 +40,7 @@ void destroyPollFds() {
     for (int i = 0; i < poll_last_index; i++) {
         if (poll_fds[i].fd > 0) {
             close(poll_fds[i].fd);
+            poll_fds[i].fd = -1;
         }
     }
     free(poll_fds);
@@ -518,7 +519,6 @@ void disconnectClient(int client_num) {
     }
     if (clients[client_num].fd != -1) {
         removeFromPollFds(clients[client_num].fd);
-        close(clients[client_num].fd);
         clients[client_num].fd = -1;
     }
 }
@@ -578,7 +578,6 @@ void disconnectServer(int server_num) {
     }
     if (servers[server_num].fd != -1) {
         removeFromPollFds(servers[server_num].fd);
-        close(servers[server_num].fd);
         servers[server_num].fd = -1;
     }
 }
@@ -869,6 +868,7 @@ static void sigCatch(int sig) {
             char a = 'a';
             write(WRITE_STOP_FD, &a, 1);
             close(WRITE_STOP_FD);
+            WRITE_STOP_FD = -1;
         }
     }
 }
