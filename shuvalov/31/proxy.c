@@ -603,10 +603,6 @@ int main(int argc, char* argv[]) {
             }
         }
         log_debug("Return from poll");
-        for (int i = 0; i < poll_fds_num; i++) {
-            printf("%d ", poll_fds[i].revents);
-        }
-        printf("\n");
         log_debug("====Process signal====");
         int return_value = process_signal(poll_fds[1]);
         if (return_value != 0) {
