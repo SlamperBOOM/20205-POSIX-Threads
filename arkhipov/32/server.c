@@ -124,23 +124,6 @@ int ReadFromHost(int host_socket, char** content) {
     return read_count;
 }
 
-void CreateRequest(const char* path, char* request) {
-    strcpy(request, "GET /");
-    strcat(request, path);
-    strcat(request, "\r\n");
-}
-
-
-void SendRequest(int socket, char* path) {
-    if (path == NULL) {
-        write(socket, "GET /\r\n", strlen("GET /\r\n"));
-    } else {
-        char request[strlen(path) + GET_REQ_SIZE];
-        CreateRequest(path, request);
-        write(socket, request, strlen(request));
-    }
-}
-
 int ConnectToHost(char* host, int port) {
     struct hostent *hp = gethostbyname(host);
     if (hp == NULL) {
@@ -180,7 +163,6 @@ int WriteToClient(int client_fd, const char* buff, int size) {
 void HandleClientDisconnect(ClientItem* client, Server* server) {
     printf("Client %d disconnected\n", client->idx);
     client->running = 0;
-    shutdown(client->fd, SHUT_RDWR);
     close(client->fd);
     pthread_exit(NULL);
 }
@@ -243,7 +225,11 @@ void* ClientWorker(void* arg) {
                 } else if (host_sock == UNABLE_TO_CREATE_SOCKET) {
                     fprintf(stderr, "Unable to create socket\n");
                 } else {
-                    SendRequest(host_sock, path);
+                    err = WriteToClient(host_sock, input_buffer, read_bytes);
+                    if (err != 0) {
+                        fprintf(stderr, "Error while send request to host\n");
+                        HandleClientDisconnect(client_item, server);
+                    }
                     printf("Send GET request to %s\n", host);
 
                     char *content;
@@ -252,6 +238,10 @@ void* ClientWorker(void* arg) {
 
                     // write to client
                     WriteToClient(client_fd, content, content_size);
+                    if (err != 0) {
+                        fprintf(stderr, "Error while write to client\n");
+                        HandleClientDisconnect(client_item, server);
+                    }
                     printf("Send %s response to client\n", host);
 
                     // write to cache
@@ -282,6 +272,7 @@ void* ClientWorker(void* arg) {
                 // get data from cache
                 int err = WriteToClient(client_fd, cache_row->content, cache_row->content_size);
                 if (err != 0) {
+                    fprintf(stderr, "Error while write to client\n");
                     HandleClientDisconnect(client_item, server);
                 }
                 // cache_row allocates in GetCacheItem
