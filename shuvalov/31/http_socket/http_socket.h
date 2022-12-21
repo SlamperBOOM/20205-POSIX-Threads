@@ -18,7 +18,7 @@ struct response {
     char* buf, * message;
     struct phr_header* headers;
     size_t buf_size, buf_len, prev_buf_len, message_len, num_headers, subscribers_max_size, headers_max_size;
-    int minor_version, status, subscribers_count, content_length, not_content_length, in_cache;
+    int minor_version, status, subscribers_count, content_length, not_content_length;
 };
 
 struct client {
@@ -47,11 +47,11 @@ int init_client(struct client* client);
 
 int init_clients(struct client* clients, size_t size);
 
-int init_servers(struct server* servers, size_t size);
+void init_servers(struct server* servers, size_t size);
 
-void setup_client(size_t index, struct client* clients);
+void setup_client(struct client* client);
 
-int setup_server(size_t index, struct server* servers);
+void setup_server(size_t index, struct server* servers);
 
 void free_clients(struct client* clients, size_t clients_num);
 

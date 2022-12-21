@@ -10,9 +10,9 @@ void subscribe(struct client* client, struct cache* cache, size_t cache_index) {
     for (int i = 0; i < response->subscribers_max_size; i++) {
         if (response->subscribers[i] == NULL) {
             response->subscribers[i] = client;
-            client->cache_node = i;
         }
     }
+    client->cache_node = (int) cache_index;
     response->subscribers_count++;
     client->response = response;
 }
@@ -67,8 +67,8 @@ int init_cache(struct cache* cache, size_t size) {
         return -1;
     }
     cache->size = size;
-    for (int i = 0; i < size; i++) {
-        if (init_cache_node(&(cache->nodes[i])) != 0) {
+    for (size_t i = 0; i < size; i++) {
+        if (init_cache_node((cache->nodes + i)) != 0) {
             return -1;
         }
     }
@@ -82,7 +82,7 @@ int init_cache_node(struct cache_node* cache_node) {
     if (cache_node->response == NULL) {
         return -1;
     }
-    cache_node->response->in_cache = 0;
+    cache_node->response->status = -1;
     cache_node->response->subscribers_count = 0;
     cache_node->response->buf_size = BUF_SIZE;
     cache_node->response->buf_len = 0;
@@ -116,7 +116,6 @@ void clear_cache_node(struct cache_node* cache_node) {
         free(cache_node->url);
     }
     cache_node->url = NULL;
-    cache_node->response->in_cache = 0;
     cache_node->response->subscribers_count = 0;
     cache_node->response->buf_size = BUF_SIZE;
     cache_node->response->buf_len = 0;

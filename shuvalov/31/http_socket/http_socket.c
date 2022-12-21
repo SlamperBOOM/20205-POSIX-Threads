@@ -31,8 +31,7 @@ int parse_response(struct response* response) {
 
 int init_clients(struct client* clients, size_t size) {
     for (int i = 0; i < size; i++) {
-        setup_client(i, clients);
-        if (init_client(&clients[i]) != 0) {
+        if (init_client(clients + i) != 0) {
             return -1;
         }
     }
@@ -40,6 +39,7 @@ int init_clients(struct client* clients, size_t size) {
 }
 
 int init_client(struct client* client) {
+    setup_client(client);
     client->request.buf = (char*) malloc(client->request.buf_size * sizeof(char));
     if (client->request.buf == NULL) {
         return -1;
@@ -52,34 +52,30 @@ int init_client(struct client* client) {
     return 0;
 }
 
-void setup_client(size_t index, struct client* clients) {
-    clients[index].fd = -1;
-    clients[index].cache_node = -1;
-    clients[index].processed = 0;
-    clients[index].request.buf_size = BUF_SIZE;
-    clients[index].request.headers_max_size = 100;
-    clients[index].request.buf_len = 0;
-    clients[index].request.prev_buf_len = 0;
-    clients[index].bytes_written = 0;
-    clients[index].response = NULL;
+void setup_client(struct client* client) {
+    client->fd = -1;
+    client->cache_node = -1;
+    client->processed = 0;
+    client->request.buf_size = BUF_SIZE;
+    client->request.headers_max_size = 100;
+    client->request.buf_len = 0;
+    client->request.prev_buf_len = 0;
+    client->bytes_written = 0;
+    client->response = NULL;
 }
 
-int init_servers(struct server* servers, size_t size) {
+void init_servers(struct server* servers, size_t size) {
     for (int i = 0; i < size; i++) {
-        if (setup_server(i, servers) != 0) {
-            return -1;
-        }
+        setup_server(i, servers);
     }
-    return 0;
 }
 
-int setup_server(size_t index, struct server* servers) {
+void setup_server(size_t index, struct server* servers) {
     servers[index].fd = -1;
     servers[index].processed = 0;
     servers[index].bytes_written = 0;
     servers[index].request = NULL;
     servers[index].response = NULL;
-    return 0;
 }
 
 void free_clients(struct client* clients, size_t clients_num) {
