@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <sys/wait.h>
+#include <fcntl.h>
 #include <semaphore.h>
 
 #define NUM_STRINGS 10
