@@ -630,11 +630,12 @@ void disconnectClient(int client_num) {
     pthread_mutex_lock(&clients[client_num].client_mutex);
     fprintf(stderr, "disconnecting client %d...\n", client_num);
     if (clients[client_num].request != NULL) {
-        free(clients[client_num].request);
-        clients[client_num].request = NULL;
+        //free(clients[client_num].request);
+        //clients[client_num].request = NULL;
+        memset(clients[client_num].request, 0, clients[client_num].request_index);
+        clients[client_num].request_index = 0;
+        //clients[client_num].REQUEST_SIZE = 0;
     }
-    clients[client_num].request_index = 0;
-    clients[client_num].REQUEST_SIZE = 0;
     if (clients[client_num].cache_record != NULL) {
         removeSubscriber(client_num, clients[client_num].cache_record);
         clients[client_num].cache_record = NULL;
@@ -970,7 +971,7 @@ void readFromClient(int client_num) {
     if (clients[client_num].request_index + was_read >= clients[client_num].REQUEST_SIZE) {
         clients[client_num].REQUEST_SIZE *= 2;
         clients[client_num].request = realloc(clients[client_num].request,
-                                                    clients[client_num].REQUEST_SIZE);
+                                                    clients[client_num].REQUEST_SIZE * sizeof(char));
     }
     memcpy(&clients[client_num].request[clients[client_num].request_index], buf, was_read);
     clients[client_num].request_index += was_read;
@@ -995,7 +996,7 @@ void readFromClient(int client_num) {
             disconnectClient(client_num);
             return;
         }
-        url = strncat(url, path, path_len);
+        memcpy(url, path, path_len);
 
 
         char *host = NULL;
@@ -1066,7 +1067,7 @@ void readFromServer(int server_num) {
 
         servers[server_num].cache_record->response = realloc(
                 servers[server_num].cache_record->response,
-                servers[server_num].cache_record->response_index);
+                servers[server_num].cache_record->response_index * sizeof(char));
         servers[server_num].cache_record->RESPONSE_SIZE = servers[server_num].cache_record->response_index;
 
         pthread_rwlock_unlock(&servers[server_num].cache_record->rw_lock);
@@ -1088,7 +1089,7 @@ void readFromServer(int server_num) {
         servers[server_num].cache_record->RESPONSE_SIZE *= 2;
         servers[server_num].cache_record->response = realloc(
                 servers[server_num].cache_record->response,
-                servers[server_num].cache_record->RESPONSE_SIZE);
+                servers[server_num].cache_record->RESPONSE_SIZE * sizeof(char));
     }
     memcpy(&servers[server_num].cache_record->response[servers[server_num].cache_record->response_index],
            buf, was_read);
@@ -1174,13 +1175,19 @@ static void sigCatch(int sig) {
 }
 
 int main(int argc, char *argv[]) {
-    if (argc < 2) {
+    if (argc < 3) {
         fprintf(stderr, "Error wrong amount of arguments\n");
         exit(ERROR_INVALID_ARGS);
     }
     char *invalid_sym;
     errno = 0;
-    int port = (int)strtol(argv[1], &invalid_sym, 10);
+    THREAD_POOL_SIZE = (int)strtol(argv[1], &invalid_sym, 10);
+    if (errno != 0 || *invalid_sym != '\0') {
+        fprintf(stderr, "Error wrong TREAD_POOL_SIZE\n");
+        THREAD_POOL_SIZE = 5;
+    }
+    errno = 0;
+    int port = (int)strtol(argv[2], &invalid_sym, 10);
     if (errno != 0 || *invalid_sym != '\0') {
         fprintf(stderr, "Error wrong port\n");
         exit(ERROR_PORT_CONVERSATION);
