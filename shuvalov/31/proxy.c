@@ -577,7 +577,7 @@ void init_sig_mask(sigset_t* sig_mask) {
 }
 
 int main(int argc, char* argv[]) {
-//    log_set_level(LOG_ERROR);
+    log_set_level(LOG_ERROR);
     int error = 0;
     if (parse_args(argc, argv) != 0) {
         printf(USAGE);
