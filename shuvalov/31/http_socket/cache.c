@@ -19,12 +19,15 @@ void subscribe(struct client* client, struct cache* cache, size_t cache_index) {
 
 void unsubscribe(struct client* client) {
     struct response* response = client->response;
+    if (response == NULL) {
+        return;
+    }
     for (int i = 0; i < response->subscribers_max_size; i++) {
         if (response->subscribers[i] != NULL && response->subscribers[i]->fd == client->fd) {
             response->subscribers[i] = NULL;
         }
     }
-    client->response->subscribers_count--;
+    response->subscribers_count--;
 }
 
 struct client* get_subscriber(struct server server, size_t index) {
@@ -123,13 +126,14 @@ void clear_cache_node(struct cache_node* cache_node) {
     cache_node->response->not_content_length = -1;
     cache_node->response->headers_max_size = 100;
     cache_node->response->subscribers_max_size = 100;
+    cache_node->response->status = -1;
 }
 
 struct cache_node* get(struct cache cache, char* url) {
     for (int i = 0; i < cache.size; i++) {
-        if (cache.nodes->empty == 0) {
-            if (strcmp(cache.nodes->url, url) == 0) {
-                return cache.nodes;
+        if (cache.nodes[i].empty == 0) {
+            if (strcmp(cache.nodes[i].url, url) == 0) {
+                return cache.nodes + i;
             }
         }
     }
