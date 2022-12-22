@@ -26,6 +26,8 @@
 #define UNABLE_TO_CREATE_SOCKET (-2)
 #define UNABLE_TO_CONNECT (-3)
 
+#define EXP_GROW_UP_LIMIT (2000000000)
+
 
 typedef struct {
     int idx;
@@ -109,16 +111,23 @@ void ParseFullURL(char* host, char* path, int* port, char* full_url) {
 }
 
 int ReadFromHost(int host_socket, char** content) {
-    *content = malloc(BUFSIZ * sizeof(char));
     int content_size = BUFSIZ;
     int read_count = 0;
     int read_iter = 1;
+    *content = malloc(content_size * sizeof(char));
+    if (*content == NULL) {
+        return -1;
+    }
     while (read_iter > 0) {
-        if (content_size - read_count < BUFSIZ) {
-            *content = realloc(*content, read_count + BUFSIZ);
-            content_size = read_count + BUFSIZ;
+        if (content_size <= read_count) {
+            int new_size = content_size + BUFSIZ;
+            if (new_size <= EXP_GROW_UP_LIMIT) {
+                new_size = content_size * 2;
+            }
+            *content = realloc(*content, new_size * sizeof(char));
+            content_size = new_size;
         }
-        read_iter = (int)read(host_socket, *content + read_count, BUFSIZ);
+        read_iter = (int)read(host_socket, *content + read_count, content_size - read_count);
         read_count += read_iter;
     }
     return read_count;
@@ -163,6 +172,7 @@ int WriteToClient(int client_fd, const char* buff, int size) {
 void HandleClientDisconnect(ClientItem* client, Server* server) {
     printf("Client %d disconnected\n", client->idx);
     client->running = 0;
+    shutdown(client->fd, SHUT_RDWR);
     close(client->fd);
     pthread_exit(NULL);
 }
@@ -234,6 +244,10 @@ void* ClientWorker(void* arg) {
 
                     char *content;
                     int content_size = ReadFromHost(host_sock, &content);
+                    if (content_size < 0) {
+                        fprintf(stderr, "Error while allocate memory for response\n");
+                        HandleClientDisconnect(client_item, server);
+                    }
                     close(host_sock);
 
                     // write to client
