@@ -528,7 +528,8 @@ int proxy_fd_init(struct pollfd* poll_fds) {
         log_error("socket creation failed: %s", strerror(errno));
         return -1;
     }
-    setsockopt(proxy_fd, SOL_SOCKET, SO_REUSEADDR, NULL, 0);
+    int option = 1;
+    setsockopt(proxy_fd, SOL_SOCKET, SO_REUSEADDR, &option, sizeof(option));
     bzero(&proxyaddr, sizeof(proxyaddr));
     proxyaddr.sin_family = AF_INET;
     proxyaddr.sin_addr.s_addr = inet_addr(proxy_ip);
