@@ -8,7 +8,7 @@
 #define MAX_THREAD_COUNT 20000
 
 typedef struct SumArgs {
-  int offset;
+	int offset;
 } SumArgs;
 
 typedef double ResultType;
