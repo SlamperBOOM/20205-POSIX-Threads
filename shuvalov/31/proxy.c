@@ -531,8 +531,8 @@ int proxy_fd_init(struct pollfd* poll_fds) {
     }
     bzero(&proxyaddr, sizeof(proxyaddr));
     proxyaddr.sin_family = AF_INET;
-    proxyaddr.sin_addr.s_addr = inet_addr(PROXY_IP);
-    proxyaddr.sin_port = htons(PROXY_PORT);
+    proxyaddr.sin_addr.s_addr = inet_addr(proxy_ip);
+    proxyaddr.sin_port = htons(proxy_port);
     if ((bind(proxy_fd, (SA*) &proxyaddr, sizeof(proxyaddr))) != 0) {
         log_error("socket bind failed: %s", strerror(errno));
         close(proxy_fd);
@@ -583,6 +583,7 @@ int main(int argc, char* argv[]) {
         printf(USAGE);
         return EXIT_FAILURE;
     }
+    printf("IP address: %s\nPort: %ld\n", proxy_ip, proxy_port);
     int poll_fds_num = MAX_FDS;
     int clients_size = poll_fds_num;
     int servers_size = poll_fds_num;

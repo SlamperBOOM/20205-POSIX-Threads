@@ -1,8 +1,12 @@
+.PHONY: clean
+
 proxy: proxy.c socket_operations.o cache.o http_socket.o picohttpparser.o log.o
 	clang -DLOG_USE_COLOR -Wall -pedantic -fsanitize=address proxy.c http_socket.o socket_operations.o cache.o picohttpparser.o log.o -o proxy
 
 picohttpparser.o: http_socket/picohttpparser/picohttpparser.c http_socket/picohttpparser/picohttpparser.h
 	clang -DLOG_USE_COLOR -Wall -pedantic -fsanitize=address http_socket/picohttpparser/picohttpparser.c -c
+
+
 
 cache.o: http_socket/cache.c http_socket/cache.h
 	clang -DLOG_USE_COLOR -Wall -pedantic -fsanitize=address http_socket/cache.c -c
