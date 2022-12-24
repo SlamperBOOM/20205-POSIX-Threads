@@ -26,7 +26,7 @@
 
 #define TIMEOUT 1200
 #define START_REQUEST_SIZE BUFSIZ
-#define START_RESPONSE_SIZE BUFSIZ
+#define START_RESPONSE_SIZE (BUFSIZ * 2)
 
 
 size_t POLL_TABLE_SIZE = 32;
@@ -36,10 +36,19 @@ struct pollfd *poll_fds;
 int WRITE_STOP_FD = -1;
 int READ_STOP_FD = -1;
 
+double average_write_size_to_client = 0;
+int num_writes_client = 0;
+double average_write_size_to_server = 0;
+int num_writes_server = 0;
+
 void destroyPollFds() {
     for (int i = 0; i < poll_last_index; i++) {
         if (poll_fds[i].fd > 0) {
-            close(poll_fds[i].fd);
+            int close_res = close(poll_fds[i].fd);
+            if (close_res < 0) {
+                fprintf(stderr, "destroy poll_fds[%d].fd ", i);
+                perror("close");
+            }
             poll_fds[i].fd = -1;
         }
     }
@@ -48,10 +57,17 @@ void destroyPollFds() {
 }
 
 void removeFromPollFds(int fd) {
+    if (fd < 0) {
+        return;
+    }
     int i;
     for (i = 0; i < poll_last_index; i++) {
         if (poll_fds[i].fd == fd) {
-            close(poll_fds[i].fd);
+            int close_res = close(poll_fds[i].fd);
+            if (close_res < 0) {
+                fprintf(stderr, "remove poll_fds[%d].fd ", i);
+                perror("close");
+            }
             poll_fds[i].fd = -1;
             poll_fds[i].events = 0;
             poll_fds[i].revents = 0;
@@ -165,12 +181,18 @@ void destroyServers() {
 
 void cleanUp() {
     fprintf(stderr, "\ncleaning up...\n");
+    fprintf(stderr, "client: avg_write_size = %lf num_writes = %d\n", average_write_size_to_client, num_writes_client);
+    fprintf(stderr, "server: avg_write_size = %lf num_writes = %d\n", average_write_size_to_server, num_writes_server);
+    sleep(1);
     if (READ_STOP_FD != -1) {
-        close(READ_STOP_FD);
+        removeFromPollFds(READ_STOP_FD);
         READ_STOP_FD = -1;
     }
     if (WRITE_STOP_FD != -1) {
-        close(WRITE_STOP_FD);
+        int close_res = close(WRITE_STOP_FD);
+        if (close_res < 0) {
+            perror("cleanUp: close WRITE_STOP_FD");
+        }
         WRITE_STOP_FD = -1;
     }
     if (valid_clients) {
@@ -453,7 +475,10 @@ int initListener(int port) {
     int bind_res = bind(listen_fd, (struct sockaddr*)&addr, sizeof(struct sockaddr_in));
     if (bind_res != 0) {
         perror("bind");
-        close(listen_fd);
+        int close_res = close(listen_fd);
+        if (close_res < 0) {
+            perror("close listen_fd");
+        }
         cleanUp();
         exit(ERROR_BIND);
     }
@@ -461,7 +486,10 @@ int initListener(int port) {
     int listen_res = listen(listen_fd, (int)CLIENTS_SIZE);
     if (listen_res == -1) {
         perror("listen");
-        close(listen_fd);
+        int close_res = close(listen_fd);
+        if (close_res < 0) {
+            perror("close listen_fd");
+        }
         cleanUp();
         exit(ERROR_LISTEN);
     }
@@ -477,7 +505,10 @@ void acceptNewClient(int listen_fd) {
     int fcntl_res = fcntl(new_client_fd, F_SETFL, O_NONBLOCK);
     if (fcntl_res < 0) {
         perror("make new client nonblock");
-        close(new_client_fd);
+        int close_res = close(new_client_fd);
+        if (close_res < 0) {
+            perror("close client");
+        }
         return;
     }
     int index = findFreeClient(new_client_fd);
@@ -702,7 +733,9 @@ void readFromClient(int client_num) {
             addSubscriber(client_num, cache_index);
             clients[client_num].cache_index = cache_index;
             clients[client_num].write_response_index = 0;
-            changeEventForFd(clients[client_num].fd, POLLIN | POLLOUT);
+            if (cache_table[cache_index].response_index != 0) {
+                changeEventForFd(clients[client_num].fd, POLLIN | POLLOUT);
+            }
             shiftRequest(client_num, pret);
             free(url);
             return;
@@ -752,7 +785,11 @@ void readFromClient(int client_num) {
         int fcntl_res = fcntl(server_fd, F_SETFL, O_NONBLOCK);
         if (fcntl_res < 0) {
             perror("make new server fd nonblock");
-            close(server_fd);
+            int close_res = close(server_fd);
+            if (close_res < 0) {
+                fprintf(stderr, "client %d ", client_num);
+                perror("close");
+            }
             disconnectClient(client_num);
             freeCacheRecord(cache_index);
             free(host);
@@ -788,11 +825,18 @@ void writeToServer(int server_num) {
                                 request[servers[server_num].write_request_index],
                             cache_table[servers[server_num].cache_index].REQUEST_SIZE -
                             servers[server_num].write_request_index);
+    /*if (written == 0 && cache_table[servers[server_num].cache_index].REQUEST_SIZE -
+        servers[server_num].write_request_index == 0) {
+        fprintf(stderr, "write nothing to server %d\n", server_num);
+    }*/
     if (written < 0) {
         perror("write");
         disconnectServer(server_num);
         return;
     }
+    average_write_size_to_server = (average_write_size_to_server * num_writes_server + (double)written) /
+            (num_writes_server + 1);
+    num_writes_server += 1;
     servers[server_num].write_request_index += (int)written;
     if (servers[server_num].write_request_index == cache_table[servers[server_num].cache_index].REQUEST_SIZE) {
         changeEventForFd(servers[server_num].fd, POLLIN);
@@ -831,7 +875,7 @@ void readFromServer(int server_num) {
     }
     if (was_read + cache_table[servers[server_num].cache_index].response_index >=
         cache_table[servers[server_num].cache_index].RESPONSE_SIZE) {
-        cache_table[servers[server_num].cache_index].RESPONSE_SIZE *= 2;
+        cache_table[servers[server_num].cache_index].RESPONSE_SIZE *= 4;
         //fprintf(stderr, "realloc for response for cache %d by server %d\n", servers[server_num].cache_index, server_num);
         cache_table[servers[server_num].cache_index].response = realloc(
                 cache_table[servers[server_num].cache_index].response,
@@ -873,11 +917,17 @@ void writeToClient(int client_num) {
                                 response[clients[client_num].write_response_index],
                             cache_table[clients[client_num].cache_index].response_index -
                                 clients[client_num].write_response_index);
+    /*if (written == 0) {
+        fprintf(stderr, "write nothing to client %d\n", client_num);
+    }*/
     if (written < 0) {
         perror("write");
         disconnectClient(client_num);
         return;
     }
+    average_write_size_to_client = (average_write_size_to_client * num_writes_client + (double)written) /
+            (num_writes_client + 1);
+    num_writes_client += 1;
     clients[client_num].write_response_index += (int)written;
     if (clients[client_num].write_response_index == cache_table[clients[client_num].cache_index].response_index) {
         changeEventForFd(clients[client_num].fd, POLLIN);
@@ -992,7 +1042,8 @@ int main(int argc, char *argv[]) {
                 }
                 handled = true;
             }
-            if (client_num == -1 && server_num == -1 && poll_fds[i].fd != listen_fd && poll_fds[i].fd != READ_STOP_FD) {
+            if (poll_fds[i].fd >= 0 && client_num == -1 && server_num == -1 && poll_fds[i].fd != listen_fd &&
+                poll_fds[i].fd != READ_STOP_FD) {
                 removeFromPollFds(poll_fds[i].fd);
             }
             if (handled) {
