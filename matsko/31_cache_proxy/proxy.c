@@ -679,7 +679,9 @@ void readFromClient(int client_num) {
     char buf[BUFSIZ];
     ssize_t was_read = read(clients[client_num].fd, buf, BUFSIZ);
     if (was_read < 0) {
+        fprintf(stderr, "error in client %d ", client_num);
         perror("read");
+        disconnectClient(client_num);
         return;
     }
     else if (was_read == 0) {
@@ -830,6 +832,7 @@ void writeToServer(int server_num) {
         fprintf(stderr, "write nothing to server %d\n", server_num);
     }*/
     if (written < 0) {
+        fprintf(stderr, "error in server %d ", server_num);
         perror("write");
         disconnectServer(server_num);
         return;
@@ -850,6 +853,7 @@ void readFromServer(int server_num) {
     char buf[BUFSIZ];
     ssize_t was_read = read(servers[server_num].fd, buf, BUFSIZ);
     if (was_read < 0) {
+        fprintf(stderr, "error in server %d ", server_num);
         perror("read");
         return;
     }
@@ -921,6 +925,7 @@ void writeToClient(int client_num) {
         fprintf(stderr, "write nothing to client %d\n", client_num);
     }*/
     if (written < 0) {
+        fprintf(stderr, "error in client %d ", client_num);
         perror("write");
         disconnectClient(client_num);
         return;
