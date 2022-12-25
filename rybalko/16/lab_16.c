@@ -73,8 +73,10 @@ int main() {
             if (wait(NULL) < 0) {
                 perror("Failed while WAIT(2)");
             }
+
+            CloseAllSem();
+            UnlinkAllSem();
             break;
     }
-    CloseAllSem();
     return 0;
 }
