@@ -1,0 +1,91 @@
+
+NUM_THREADS = 5
+Time taken to create one thread: 0.000096 sec.
+canonic pi = 	3.14159265358979
+Max time waiting: 	0.002389 sec
+pi done = 	3.1415926533383 
+
+
+NUM_THREADS = 10
+Time taken to create one thread: 0.000065 sec.
+canonic pi = 	3.14159265358979
+Max time waiting: 	0.010568 sec
+pi done = 	3.14159265333906 
+
+
+NUM_THREADS = 20
+Time taken to create one thread: 0.000058 sec.
+canonic pi = 	3.14159265358979
+Max time waiting: 	0.170335 sec
+pi done = 	3.14159265333941 
+
+
+NUM_THREADS = 50
+Time taken to create one thread: 0.000039 sec.
+canonic pi = 	3.14159265358979
+Max time waiting: 	0.846890 sec
+pi done = 	3.14159265333963 
+
+
+NUM_THREADS = 100
+Time taken to create one thread: 0.000039 sec.
+canonic pi = 	3.14159265358979
+Max time waiting: 	0.667601 sec
+pi done = 	3.14159265334046 
+
+
+NUM_THREADS = 200
+Time taken to create one thread: 0.000044 sec.
+canonic pi = 	3.14159265358979
+Max time waiting: 	0.996749 sec
+pi done = 	3.14159265333982 
+
+
+NUM_THREADS = 500
+Time taken to create one thread: 0.000055 sec.
+canonic pi = 	3.14159265358979
+Max time waiting: 	1.123935 sec
+pi done = 	3.14159265333969 
+
+
+NUM_THREADS = 1000
+Time taken to create one thread: 0.000097 sec.
+canonic pi = 	3.14159265358979
+Max time waiting: 	1.136572 sec
+pi done = 	3.14159265333965 
+
+
+NUM_THREADS = 2000
+Time taken to create one thread: 0.000393 sec.
+canonic pi = 	3.14159265358979
+Max time waiting: 	1.177641 sec
+pi done = 	3.14159265333973 
+
+
+NUM_THREADS = 5000
+Time taken to create one thread: 0.000797 sec.
+canonic pi = 	3.14159265358979
+Max time waiting: 	1.205376 sec
+pi done = 	3.14159265333972 
+
+
+NUM_THREADS = 10000
+Time taken to create one thread: 0.001710 sec.
+canonic pi = 	3.14159265358979
+Max time waiting: 	1.218668 sec
+pi done = 	3.14159265333976 
+
+
+NUM_THREADS = 20000
+Time taken to create one thread: 0.002728 sec.
+canonic pi = 	3.14159265358979
+Max time waiting: 	1.123112 sec
+pi done = 	3.14159265333976 
+
+
+NUM_THREADS = 50000
+Time taken to create one thread: 0.004215 sec.
+canonic pi = 	3.14159265358979
+Max time waiting: 	0.906668 sec
+pi done = 	3.14159265320819 
+
