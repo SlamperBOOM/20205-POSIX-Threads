@@ -2,10 +2,7 @@
 
 #include <stdio.h>
 #include <unistd.h>
-<<<<<<< Updated upstream
-=======
 #include <fcntl.h>
->>>>>>> Stashed changes
 
 int start_fd;
 int write_fd;
@@ -18,8 +15,6 @@ int sync_pipe_init() {
     }
     start_fd = pipe_fds[0];
     write_fd = pipe_fds[1];
-<<<<<<< Updated upstream
-=======
     int fcntl_res = fcntl(start_fd, F_SETFL, O_NONBLOCK);
     if (fcntl_res < 0) {
         perror("make new client nonblock");
@@ -27,7 +22,6 @@ int sync_pipe_init() {
         close(write_fd);
         return -1;
     }
->>>>>>> Stashed changes
     return pipe_res;
 }
 
@@ -65,10 +59,7 @@ void sync_pipe_notify(int num_really_created_threads) {
         }
     }
 }
-<<<<<<< Updated upstream
-=======
 
 int get_rfd_spipe() {
     return start_fd;
 }
->>>>>>> Stashed changes

@@ -13,10 +13,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <pthread.h>
-<<<<<<< Updated upstream
-=======
 #include <sys/eventfd.h>
->>>>>>> Stashed changes
 
 #include "cache.h"
 #include "picohttpparser-master/picohttpparser.h"
@@ -33,28 +30,11 @@
 #define ERROR_SIG_HANDLER_INIT 8
 #define ERROR_TASK_QUEUE_INIT 9
 #define ERROR_INIT_SYNC_PIPE 10
-<<<<<<< Updated upstream
-=======
 #define ERROR_INIT_EVENT_FD 11
->>>>>>> Stashed changes
 
 #define TIMEOUT 1200
 #define START_REQUEST_SIZE BUFSIZ
 #define START_RESPONSE_SIZE BUFSIZ
-<<<<<<< Updated upstream
-
-int THREAD_POOL_SIZE = 5;
-
-int REAL_THREAD_POOL_SIZE = 0;
-task_queue_t *task_queue = NULL;
-bool valid_task_queue = false;
-int tasks_submitted = 0;
-int tasks_completed = 0;
-pthread_mutex_t tasks_counter_mutex;
-bool valid_tasks_completed_mutex = false;
-pthread_cond_t cond;
-bool valid_cond;
-=======
 #define LISTEN_NUM 16
 
 int THREAD_POOL_SIZE = 5;
@@ -66,7 +46,6 @@ int REAL_THREAD_POOL_SIZE = 0;
 task_queue_t *task_queue = NULL;
 bool valid_task_queue = false;
 
->>>>>>> Stashed changes
 
 pthread_t *tids = NULL;
 bool *is_created_thread = NULL;
@@ -74,67 +53,18 @@ bool valid_threads_info = false;
 
 bool is_stop = false;
 
-<<<<<<< Updated upstream
-void *threadFunc(void *arg) {
-    while (!is_stop) {
-        sync_pipe_wait();
-        if (is_stop) {
-            break;
-        }
-        task_t *task = popTask(task_queue);
-        if (task != NULL) {
-            task->func(task->arg);
-            free(task);
-            pthread_mutex_lock(&tasks_counter_mutex);
-            tasks_completed += 1;
-            if (tasks_completed == tasks_submitted) {
-                pthread_cond_signal(&cond);
-            }
-            pthread_mutex_unlock(&tasks_counter_mutex);
-        }
-    }
-    pthread_exit((void *)0);
-}
-
-size_t POLL_TABLE_SIZE = 32;
-int poll_last_index = -1;
-struct pollfd *poll_fds;
-pthread_mutex_t poll_mutex;
-
-int WRITE_STOP_FD = -1;
-int READ_STOP_FD = -1;
-
-void destroyPollFds() {
-    pthread_mutex_lock(&poll_mutex);
-    for (int i = 0; i < poll_last_index; i++) {
-=======
 int WRITE_STOP_FD = -1;
 int READ_STOP_FD = -1;
 
 void destroyPollFds(struct pollfd *poll_fds, int *poll_last_index) {
     //fprintf(stderr, "destroying poll_fds...\n");
     for (int i = 0; i < *poll_last_index; i++) {
->>>>>>> Stashed changes
         if (poll_fds[i].fd > 0) {
             close(poll_fds[i].fd);
             poll_fds[i].fd = -1;
         }
     }
     free(poll_fds);
-<<<<<<< Updated upstream
-    poll_last_index = -1;
-    pthread_mutex_unlock(&poll_mutex);
-    pthread_mutex_destroy(&poll_mutex);
-}
-
-void removeFromPollFds(int fd) {
-    int i;
-    pthread_mutex_lock(&poll_mutex);
-    for (i = 0; i < poll_last_index; i++) {
-        pthread_mutex_unlock(&poll_mutex);
-
-        pthread_mutex_lock(&poll_mutex);
-=======
     *poll_last_index = -1;
 }
 
@@ -148,7 +78,6 @@ void removeFromPollFds(struct pollfd * poll_fds, int *poll_last_index, int fd) {
     }*/
     int i;
     for (i = 0; i < *poll_last_index; i++) {
->>>>>>> Stashed changes
         if (poll_fds[i].fd == fd) {
             close(poll_fds[i].fd);
             poll_fds[i].fd = -1;
@@ -156,21 +85,6 @@ void removeFromPollFds(struct pollfd * poll_fds, int *poll_last_index, int fd) {
             poll_fds[i].revents = 0;
             break;
         }
-<<<<<<< Updated upstream
-        pthread_mutex_unlock(&poll_mutex);
-
-        pthread_mutex_lock(&poll_mutex);
-    }
-    if (i == poll_last_index - 1) {
-        poll_last_index -= 1;
-    }
-    for (i = (int)poll_last_index - 1; i > 0; i--) {
-        pthread_mutex_unlock(&poll_mutex);
-
-        pthread_mutex_lock(&poll_mutex);
-        if (poll_fds[i].fd == -1) {
-            poll_last_index -= 1;
-=======
     }
     if (i == *poll_last_index - 1) {
         *poll_last_index -= 1;
@@ -178,16 +92,11 @@ void removeFromPollFds(struct pollfd * poll_fds, int *poll_last_index, int fd) {
     for (i = (int)*poll_last_index - 1; i > 0; i--) {
         if (poll_fds[i].fd == -1) {
             *poll_last_index -= 1;
->>>>>>> Stashed changes
         }
         else {
             break;
         }
     }
-<<<<<<< Updated upstream
-    pthread_mutex_unlock(&poll_mutex);
-=======
->>>>>>> Stashed changes
 }
 
 cache_list_t *cache_list = NULL;
@@ -210,56 +119,23 @@ void destroyCacheList() {
 typedef struct client {
     char *request;
     cache_t *cache_record;
-<<<<<<< Updated upstream
-    pthread_mutex_t client_mutex;
-=======
->>>>>>> Stashed changes
     size_t REQUEST_SIZE;
     size_t request_index;
 
     int write_response_index;
-<<<<<<< Updated upstream
-=======
     int thread_fd;
->>>>>>> Stashed changes
 
     int fd;
 } client_t;
 
-<<<<<<< Updated upstream
-size_t CLIENTS_SIZE = 16;
-client_t *clients;
-bool valid_clients = false;
-pthread_mutex_t clients_mutex;
-
-void destroyClients() {
-    pthread_mutex_lock(&clients_mutex);
-    for (int i = 0; i < CLIENTS_SIZE; i++) {
-=======
 void destroyClients(client_t *clients, size_t *CLIENTS_SIZE, struct pollfd *poll_fds, int *poll_last_index) {
     //fprintf(stderr, "destroying clients...\n");
     for (int i = 0; i < *CLIENTS_SIZE; i++) {
->>>>>>> Stashed changes
         if (clients[i].request != NULL) {
             free(clients[i].request);
             clients[i].request = NULL;
         }
         if (clients[i].fd != -1) {
-<<<<<<< Updated upstream
-            removeFromPollFds(clients[i].fd);
-            clients[i].fd = -1;
-        }
-        clients[i].REQUEST_SIZE = 0;
-        clients[i].request_index = 0;
-        clients[i].cache_record = NULL;
-        pthread_mutex_destroy(&clients[i].client_mutex);
-        clients[i].write_response_index = -1;
-    }
-    free(clients);
-    valid_clients = false;
-    pthread_mutex_unlock(&clients_mutex);
-    pthread_mutex_destroy(&clients_mutex);
-=======
             removeFromPollFds(poll_fds, poll_last_index, clients[i].fd);
             clients[i].fd = -1;
         }
@@ -272,53 +148,27 @@ void destroyClients(client_t *clients, size_t *CLIENTS_SIZE, struct pollfd *poll
     //fprintf(stderr, "free clients\n");
     free(clients);
     *CLIENTS_SIZE = 0;
->>>>>>> Stashed changes
 }
 
 typedef struct server {
     cache_t *cache_record;
-<<<<<<< Updated upstream
-    pthread_mutex_t server_mutex;
-=======
->>>>>>> Stashed changes
     int write_request_index;
     int fd;
 } server_t;
 
-<<<<<<< Updated upstream
-size_t SERVERS_SIZE = 8;
-server_t *servers;
-bool valid_servers = false;
-pthread_mutex_t servers_mutex;
-
-void destroyServers() {
-    pthread_mutex_lock(&servers_mutex);
-    for (int i = 0; i < SERVERS_SIZE; i++) {
-        if (servers[i].fd != -1) {
-            removeFromPollFds(servers[i].fd);
-            pthread_mutex_destroy(&servers[i].server_mutex);
-=======
 void destroyServers(server_t *servers, size_t *SERVERS_SIZE, struct pollfd *poll_fds, int *poll_last_index) {
     //fprintf(stderr, "destroying servers...\n");
     for (int i = 0; i < *SERVERS_SIZE; i++) {
         if (servers[i].fd != -1) {
             removeFromPollFds(poll_fds, poll_last_index, servers[i].fd);
             servers[i].cache_record->server_index = -1;
->>>>>>> Stashed changes
             servers[i].cache_record = NULL;
             servers[i].fd = -1;
         }
     }
-<<<<<<< Updated upstream
-    free(servers);
-    valid_servers = false;
-    pthread_mutex_unlock(&servers_mutex);
-    pthread_mutex_destroy(&servers_mutex);
-=======
     //fprintf(stderr, "free servers...\n");
     free(servers);
     *SERVERS_SIZE = 0;
->>>>>>> Stashed changes
 }
 
 void cleanUp() {
@@ -332,29 +182,10 @@ void cleanUp() {
             }
         }
     }
-<<<<<<< Updated upstream
-    if (READ_STOP_FD != -1) {
-        close(READ_STOP_FD);
-        READ_STOP_FD = -1;
-    }
-=======
->>>>>>> Stashed changes
     if (WRITE_STOP_FD != -1) {
         close(WRITE_STOP_FD);
         WRITE_STOP_FD = -1;
     }
-<<<<<<< Updated upstream
-    if (valid_clients) {
-        destroyClients();
-    }
-    if (valid_servers) {
-        destroyServers();
-    }
-    if (poll_last_index >= 0) {
-        destroyPollFds();
-    }
-=======
->>>>>>> Stashed changes
     if (valid_cache) {
         destroyCacheList();
     }
@@ -370,19 +201,9 @@ void cleanUp() {
         free(tids);
         valid_threads_info = false;
     }
-<<<<<<< Updated upstream
-    if (valid_tasks_completed_mutex) {
-        pthread_mutex_destroy(&tasks_counter_mutex);
-        valid_tasks_completed_mutex = false;
-    }
-    if (valid_cond) {
-        pthread_cond_destroy(&cond);
-        valid_cond = false;
-=======
     if (valid_thread_pool_size_mutex) {
         pthread_mutex_destroy(&thread_pool_size_mutex);
         valid_thread_pool_size_mutex = false;
->>>>>>> Stashed changes
     }
     sync_pipe_close();
 
@@ -396,92 +217,6 @@ void initRwLockAttr() {
     }
 }
 
-<<<<<<< Updated upstream
-void initEmptyServer(size_t i) {
-    servers[i].fd = -1;
-    servers[i].cache_record = NULL;
-    pthread_mutex_init(&servers[i].server_mutex, NULL);
-    servers[i].write_request_index = -1;
-}
-
-void initServers() {
-    pthread_mutex_init(&servers_mutex, NULL);
-    pthread_mutex_lock(&servers_mutex);
-    servers = (server_t *) calloc(SERVERS_SIZE, sizeof(server_t));
-    if (servers == NULL) {
-        fprintf(stderr, "failed to alloc memory for servers\n");
-        pthread_mutex_unlock(&servers_mutex);
-        cleanUp();
-        exit(ERROR_ALLOC);
-    }
-    for (size_t i = 0; i < SERVERS_SIZE; i++) {
-        initEmptyServer(i);
-    }
-    pthread_mutex_unlock(&servers_mutex);
-}
-
-void reallocServers() {
-    size_t prev_size = SERVERS_SIZE;
-    SERVERS_SIZE *= 2;
-    servers = realloc(servers, SERVERS_SIZE * sizeof(server_t));
-    for (size_t i = prev_size; i < SERVERS_SIZE; i++) {
-        initEmptyServer(i);
-    }
-}
-
-int findFreeServer(int server_fd) {
-    if (server_fd < 0) {
-        return -1;
-    }
-    pthread_mutex_lock(&servers_mutex);
-    for (int i = 0; i < SERVERS_SIZE; i++) {
-        pthread_mutex_unlock(&servers_mutex);
-
-        pthread_mutex_lock(&servers_mutex);
-        if (servers[i].fd == -1) {
-            servers[i].fd = server_fd;
-            pthread_mutex_unlock(&servers_mutex);
-            return i;
-        }
-        pthread_mutex_unlock(&servers_mutex);
-
-        pthread_mutex_lock(&servers_mutex);
-    }
-    size_t prev_size = SERVERS_SIZE;
-    reallocServers();
-    servers[prev_size].fd = server_fd;
-    pthread_mutex_unlock(&servers_mutex);
-    return (int)prev_size;
-}
-
-int findServerByFd(int fd) {
-    if (fd < 0) {
-        return -1;
-    }
-    pthread_mutex_lock(&servers_mutex);
-    for (int i = 0; i < SERVERS_SIZE; i++) {
-        if (servers[i].fd == fd) {
-            pthread_mutex_unlock(&servers_mutex);
-            return i;
-        }
-        pthread_mutex_unlock(&servers_mutex);
-
-        pthread_mutex_lock(&servers_mutex);
-    }
-    pthread_mutex_unlock(&servers_mutex);
-    return -1;
-}
-
-void initEmptyClient(size_t i) {
-    if (i >= CLIENTS_SIZE) {
-        return;
-    }
-    clients[i].fd = -1;
-    clients[i].request_index = 0;
-    clients[i].request = NULL;
-    clients[i].REQUEST_SIZE = 0;
-    pthread_mutex_init(&clients[i].client_mutex, NULL);
-=======
 void initEmptyServer(server_t *servers, size_t i) {
     servers[i].fd = -1;
     servers[i].cache_record = NULL;
@@ -543,80 +278,11 @@ void initEmptyClient(client_t *clients, size_t i) {
     clients[i].request_index = 0;
     clients[i].request = NULL;
     clients[i].REQUEST_SIZE = 0;
->>>>>>> Stashed changes
 
     clients[i].cache_record = NULL;
     clients[i].write_response_index = -1;
 }
 
-<<<<<<< Updated upstream
-void initClients() {
-    pthread_mutex_init(&clients_mutex, NULL);
-    pthread_mutex_lock(&clients_mutex);
-    clients = (client_t *) calloc(CLIENTS_SIZE, sizeof(client_t));
-    if (clients == NULL) {
-        fprintf(stderr, "failed to alloc memory for clients\n");
-        pthread_mutex_unlock(&clients_mutex);
-        cleanUp();
-        exit(ERROR_ALLOC);
-    }
-    for (size_t i = 0; i < CLIENTS_SIZE; i++) {
-        initEmptyClient(i);
-    }
-    valid_clients = true;
-    pthread_mutex_unlock(&clients_mutex);
-}
-
-void reallocClients() {
-    size_t prev_size = CLIENTS_SIZE;
-    CLIENTS_SIZE *= 2;
-    clients = realloc(clients, CLIENTS_SIZE * sizeof(client_t));
-    for (size_t i = prev_size; i < CLIENTS_SIZE; i++) {
-        initEmptyClient(i);
-    }
-}
-
-int findFreeClient(int client_fd) {
-    if (client_fd < 0) {
-        return -1;
-    }
-    pthread_mutex_lock(&clients_mutex);
-    for (int i = 0; i < CLIENTS_SIZE; i++) {
-        pthread_mutex_unlock(&clients_mutex);
-
-        pthread_mutex_lock(&clients_mutex);
-        if (clients[i].fd == -1) {
-            clients[i].fd = client_fd;
-            pthread_mutex_unlock(&clients_mutex);
-            return i;
-        }
-        pthread_mutex_unlock(&clients_mutex);
-
-        pthread_mutex_lock(&clients_mutex);
-    }
-    size_t prev_size = CLIENTS_SIZE;
-    reallocClients();
-    clients[prev_size].fd = client_fd;
-    pthread_mutex_unlock(&clients_mutex);
-    return (int)prev_size;
-}
-
-int findClientByFd(int fd) {
-    if (fd < 0) {
-        return -1;
-    }
-    pthread_mutex_lock(&clients_mutex);
-    for (int i = 0; i < CLIENTS_SIZE; i++) {
-        if (clients[i].fd == fd) {
-            pthread_mutex_unlock(&clients_mutex);
-            return i;
-        }
-        pthread_mutex_unlock(&clients_mutex);
-
-        pthread_mutex_lock(&clients_mutex);
-    }
-    pthread_mutex_unlock(&clients_mutex);
-=======
 client_t *initClients(size_t CLIENTS_SIZE) {
     client_t *clients = (client_t *) calloc(CLIENTS_SIZE, sizeof(client_t));
     if (clients == NULL) {
@@ -663,7 +329,6 @@ int findClientByFd(client_t *clients, const size_t *CLIENTS_SIZE, int fd) {
             return i;
         }
     }
->>>>>>> Stashed changes
     return -1;
 }
 
@@ -698,61 +363,15 @@ void initCacheList() {
     valid_cache = true;
 }
 
-<<<<<<< Updated upstream
-void initPollFds() {
-    pthread_mutex_init(&poll_mutex, NULL);
-    poll_fds = (struct pollfd *)calloc(POLL_TABLE_SIZE, sizeof(struct pollfd));
-    if (poll_fds == NULL) {
-        fprintf(stderr, "failed to alloc memory for poll_fds\n");
-        cleanUp();
-        exit(ERROR_ALLOC);
-=======
 struct pollfd *initPollFds(size_t POLL_TABLE_SIZE, int *poll_last_index) {
     struct pollfd *poll_fds = (struct pollfd *)calloc(POLL_TABLE_SIZE, sizeof(struct pollfd));
     if (poll_fds == NULL) {
         fprintf(stderr, "failed to alloc memory for poll_fds\n");
         return NULL;
->>>>>>> Stashed changes
     }
     for (int i = 0; i < POLL_TABLE_SIZE; i++) {
         poll_fds[i].fd = -1;
     }
-<<<<<<< Updated upstream
-    poll_last_index = 0;
-}
-
-void reallocPollFds() {
-    POLL_TABLE_SIZE *= 2;
-    poll_fds = realloc(poll_fds, POLL_TABLE_SIZE * (sizeof(struct pollfd)));
-    for (size_t i = poll_last_index; i < POLL_TABLE_SIZE; i++) {
-        poll_fds[i].fd = -1;
-    }
-}
-
-void addFdToPollFds(int fd, short events) {
-    pthread_mutex_lock(&poll_mutex);
-    for (int i = 0; i < poll_last_index; i++) {
-        pthread_mutex_unlock(&poll_mutex);
-
-        pthread_mutex_lock(&poll_mutex);
-        if (poll_fds[i].fd == -1) {
-            poll_fds[i].fd = fd;
-            poll_fds[i].events = events;
-            pthread_mutex_unlock(&poll_mutex);
-            return;
-        }
-        pthread_mutex_unlock(&poll_mutex);
-
-        pthread_mutex_lock(&poll_mutex);
-    }
-    if (poll_last_index >= POLL_TABLE_SIZE) {
-        reallocPollFds();
-    }
-    poll_fds[poll_last_index].fd = fd;
-    poll_fds[poll_last_index].events = events;
-    poll_last_index += 1;
-    pthread_mutex_unlock(&poll_mutex);
-=======
     *poll_last_index = 0;
     return poll_fds;
 }
@@ -790,7 +409,6 @@ void addFdToPollFds(struct pollfd **poll_fds, int *poll_last_index, size_t *POLL
     (*poll_fds)[*poll_last_index].fd = fd;
     (*poll_fds)[*poll_last_index].events = events;
     *poll_last_index += 1;
->>>>>>> Stashed changes
 }
 
 int connectToServerHost(char *hostname, int port) {
@@ -842,11 +460,7 @@ int initListener(int port) {
         exit(ERROR_BIND);
     }
 
-<<<<<<< Updated upstream
-    int listen_res = listen(listen_fd, (int)CLIENTS_SIZE);
-=======
     int listen_res = listen(listen_fd, LISTEN_NUM);
->>>>>>> Stashed changes
     if (listen_res == -1) {
         perror("listen");
         close(listen_fd);
@@ -857,58 +471,19 @@ int initListener(int port) {
 }
 
 void acceptNewClient(int listen_fd) {
-<<<<<<< Updated upstream
-=======
     //fprintf(stderr, "accepting new client...\n");
->>>>>>> Stashed changes
     int new_client_fd = accept(listen_fd, NULL, NULL);
     if (new_client_fd == -1) {
         perror("new client accept");
         return;
     }
-<<<<<<< Updated upstream
-=======
     //fprintf(stderr, "making NONBLOCK...\n");
->>>>>>> Stashed changes
     int fcntl_res = fcntl(new_client_fd, F_SETFL, O_NONBLOCK);
     if (fcntl_res < 0) {
         perror("make new client nonblock");
         close(new_client_fd);
         return;
     }
-<<<<<<< Updated upstream
-    int index = findFreeClient(new_client_fd);
-    addFdToPollFds(new_client_fd, POLLIN);
-    fprintf(stderr, "new client %d accepted\n", index);
-}
-
-void changeEventForFd(int fd, short new_events) {
-    pthread_mutex_lock(&poll_mutex);
-    for (int i = 0; i < poll_last_index; i++) {
-        pthread_mutex_unlock(&poll_mutex);
-
-        pthread_mutex_lock(&poll_mutex);
-        if (poll_fds[i].fd == fd) {
-            poll_fds[i].events = new_events;
-            pthread_mutex_unlock(&poll_mutex);
-            return;
-        }
-        pthread_mutex_unlock(&poll_mutex);
-
-        pthread_mutex_lock(&poll_mutex);
-    }
-    pthread_mutex_unlock(&poll_mutex);
-}
-
-void removeSubscriber(int client_num, cache_t *record) {
-    if (record == NULL || client_num >= CLIENTS_SIZE || client_num < 0) {
-        return;
-    }
-    //fprintf(stderr, "removing subscriber %d...\n", client_num);
-    pthread_mutex_lock(&record->subs_mutex);
-    for (int i = 0; i < record->SUBSCRIBERS_SIZE; i++) {
-        if (record->subscribers[i] == client_num) {
-=======
     //fprintf(stderr, "accept done, adding client_fd %d to queue\n", new_client_fd);
     submitTask(task_queue, new_client_fd);
     sync_pipe_notify(1);
@@ -935,27 +510,17 @@ void removeSubscriber(int thread_fd, cache_t *record) {
     pthread_mutex_lock(&record->subs_mutex);
     for (int i = 0; i < record->SUBSCRIBERS_SIZE; i++) {
         if (record->subscribers[i] == thread_fd) {
->>>>>>> Stashed changes
             record->subscribers[i] = -1;
         }
     }
     pthread_mutex_unlock(&record->subs_mutex);
 }
 
-<<<<<<< Updated upstream
-void disconnectClient(int client_num) {
-    if (client_num < 0 || client_num >= CLIENTS_SIZE) {
-        return;
-    }
-    pthread_mutex_lock(&clients_mutex);
-    pthread_mutex_lock(&clients[client_num].client_mutex);
-=======
 void disconnectClient(client_t *clients, size_t CLIENTS_SIZE, int client_num, struct pollfd *poll_fds,
         int *poll_last_index) {
     if (client_num < 0 || client_num >= CLIENTS_SIZE) {
         return;
     }
->>>>>>> Stashed changes
     fprintf(stderr, "disconnecting client %d...\n", client_num);
     if (clients[client_num].request != NULL) {
         //free(clients[client_num].request);
@@ -965,28 +530,11 @@ void disconnectClient(client_t *clients, size_t CLIENTS_SIZE, int client_num, st
         //clients[client_num].REQUEST_SIZE = 0;
     }
     if (clients[client_num].cache_record != NULL) {
-<<<<<<< Updated upstream
-        removeSubscriber(client_num, clients[client_num].cache_record);
-=======
         //removeSubscriber(clients[client_num].thread_fd, clients[client_num].cache_record);
->>>>>>> Stashed changes
         clients[client_num].cache_record = NULL;
         clients[client_num].write_response_index = -1;
     }
     if (clients[client_num].fd != -1) {
-<<<<<<< Updated upstream
-        removeFromPollFds(clients[client_num].fd);
-        clients[client_num].fd = -1;
-    }
-    pthread_mutex_unlock(&clients[client_num].client_mutex);
-    pthread_mutex_unlock(&clients_mutex);
-}
-
-void addSubscriber(int client_num, cache_t *record) {
-    if (record == NULL || client_num >= CLIENTS_SIZE || client_num < 0 ||
-        !record->valid) {
-        return;
-=======
         removeFromPollFds(poll_fds, poll_last_index, clients[client_num].fd);
         clients[client_num].fd = -1;
     }
@@ -996,7 +544,6 @@ void addSubscriber(int client_num, cache_t *record) {
 int addSubscriber(int thread_fd, cache_t *record) {
     if (record == NULL || thread_fd < 0 || !record->valid) {
         return -1;
->>>>>>> Stashed changes
     }
     pthread_mutex_lock(&record->subs_mutex);
     if (record->SUBSCRIBERS_SIZE == 0) {
@@ -1004,29 +551,17 @@ int addSubscriber(int thread_fd, cache_t *record) {
         record->subscribers = (int *) calloc(record->SUBSCRIBERS_SIZE, sizeof(int));
         if (record->subscribers == NULL) {
             pthread_mutex_unlock(&record->subs_mutex);
-<<<<<<< Updated upstream
-            disconnectClient(client_num);
-            return;
-=======
             return -1;
->>>>>>> Stashed changes
         }
         for (int i = 0; i < record->SUBSCRIBERS_SIZE; i++) {
             record->subscribers[i] = -1;
         }
     }
     for (int i = 0; i < record->SUBSCRIBERS_SIZE; i++) {
-<<<<<<< Updated upstream
-        if (record->subscribers[i] == -1 || record->subscribers[i] == client_num) {
-            record->subscribers[i] = client_num;
-            pthread_mutex_unlock(&record->subs_mutex);
-            return;
-=======
         if (record->subscribers[i] == -1 || record->subscribers[i] == thread_fd) {
             record->subscribers[i] = thread_fd;
             pthread_mutex_unlock(&record->subs_mutex);
             return 0;
->>>>>>> Stashed changes
         }
     }
     size_t prev_index = record->SUBSCRIBERS_SIZE;
@@ -1035,20 +570,6 @@ int addSubscriber(int thread_fd, cache_t *record) {
     for (size_t i = prev_index; i < record->SUBSCRIBERS_SIZE; i++) {
         record->subscribers[i] = -1;
     }
-<<<<<<< Updated upstream
-    record->subscribers[prev_index] = client_num;
-    pthread_mutex_unlock(&record->subs_mutex);
-}
-
-void notifySubscribers(cache_t *record, short new_events) {
-    pthread_mutex_lock(&record->subs_mutex);
-    for (int i = 0; i < record->SUBSCRIBERS_SIZE; i++) {
-        if (record->subscribers[i] != -1) {
-            changeEventForFd(clients[record->subscribers[i]].fd, new_events);
-            if (clients[record->subscribers[i]].write_response_index < 0) {
-                clients[record->subscribers[i]].write_response_index = 0;
-            }
-=======
     record->subscribers[prev_index] = thread_fd;
     pthread_mutex_unlock(&record->subs_mutex);
     return 0;
@@ -1060,33 +581,11 @@ void notifySubscribers(cache_t *record) {
         if (record->subscribers[i] != -1) {
             uint64_t u = 1;
             write(record->subscribers[i], &u, sizeof(u));
->>>>>>> Stashed changes
         }
     }
     pthread_mutex_unlock(&record->subs_mutex);
 }
 
-<<<<<<< Updated upstream
-void disconnectServer(int server_num) {
-    if (server_num < 0 || server_num > SERVERS_SIZE) {
-        return;
-    }
-    pthread_mutex_lock(&servers_mutex);
-    servers[server_num].write_request_index = -1;
-    if (servers[server_num].cache_record != NULL) {
-        servers[server_num].cache_record->server_index = -1;
-        notifySubscribers(servers[server_num].cache_record, POLLIN | POLLOUT);
-        servers[server_num].cache_record = NULL;
-    }
-    if (servers[server_num].fd != -1) {
-        removeFromPollFds(servers[server_num].fd);
-        servers[server_num].fd = -1;
-    }
-    pthread_mutex_unlock(&servers_mutex);
-}
-
-void freeCacheRecord(cache_t *record) {
-=======
 void disconnectServer(server_t *servers, size_t SERVERS_SIZE, int server_num, struct pollfd *poll_fds,
         int *poll_last_index) {
     if (server_num < 0 || server_num > SERVERS_SIZE) {
@@ -1106,7 +605,6 @@ void disconnectServer(server_t *servers, size_t SERVERS_SIZE, int server_num, st
 
 void freeCacheRecord(cache_t *record, server_t *servers, size_t SERVERS_SIZE, struct pollfd *poll_fds,
         int *poll_last_index) {
->>>>>>> Stashed changes
     if (record == NULL) {
         return;
     }
@@ -1129,14 +627,6 @@ void freeCacheRecord(cache_t *record, server_t *servers, size_t SERVERS_SIZE, st
     record->RESPONSE_SIZE = 0;
     if (record->subscribers != NULL) {
         pthread_mutex_lock(&record->subs_mutex);
-<<<<<<< Updated upstream
-        for(int i = 0; i < record->SUBSCRIBERS_SIZE; i++) {
-            if (record->subscribers[i] != -1) {
-                disconnectClient(record->subscribers[i]);
-            }
-        }
-=======
->>>>>>> Stashed changes
         free(record->subscribers);
         record->subscribers = NULL;
         record->SUBSCRIBERS_SIZE = 0;
@@ -1147,11 +637,7 @@ void freeCacheRecord(cache_t *record, server_t *servers, size_t SERVERS_SIZE, st
         record->valid_subs_mutex = false;
     }
     if (record->server_index != -1) {
-<<<<<<< Updated upstream
-        disconnectServer(record->server_index);
-=======
         disconnectServer(servers, SERVERS_SIZE, record->server_index, poll_fds, poll_last_index);
->>>>>>> Stashed changes
     }
     if (record->valid_rw_lock) {
         pthread_rwlock_destroy(&record->rw_lock);
@@ -1220,40 +706,23 @@ void printCacheList() {
     pthread_mutex_unlock(&cache_list->mutex);
 }
 
-<<<<<<< Updated upstream
-void findAndAddCacheRecord(char *url, size_t url_len, int client_num, char *host, int REQUEST_SIZE) {
-    //fprintf(stderr, "adding client %d to cache record\nwith url: %s\n", client_num, url);
-=======
 void findAndAddCacheRecord(char *url, size_t url_len, client_t *clients, size_t CLIENTS_SIZE, int client_num,
                            char *host, int REQUEST_SIZE, struct pollfd **poll_fds, int *poll_last_index,
                                    size_t *POLL_TABLE_SIZE, server_t **servers, size_t *SERVERS_SIZE) {
     //fprintf(stderr, "adding client %d to cache record\nwith url: %.*s\n", client_num, (int)url_len, url);
->>>>>>> Stashed changes
     pthread_mutex_lock(&cache_list->mutex);
     cache_node_t *list_nodes = cache_list->head;
     cache_node_t *prev_node = NULL;
     while (list_nodes != NULL) {
         if (!list_nodes->record->valid) {
             cache_node_t *next_node = list_nodes->next;
-<<<<<<< Updated upstream
-            freeCacheRecord(list_nodes->record);
-=======
             freeCacheRecord(list_nodes->record, *servers, *SERVERS_SIZE, *poll_fds, poll_last_index);
->>>>>>> Stashed changes
             free(list_nodes->record);
             free(list_nodes);
             list_nodes = next_node;
             continue;
         }
         if (list_nodes->record->URL_LEN == url_len && strncmp(list_nodes->record->url, url, url_len) == 0) {
-<<<<<<< Updated upstream
-            pthread_mutex_lock(&clients[client_num].client_mutex);
-            clients[client_num].cache_record = list_nodes->record;
-            addSubscriber(client_num, list_nodes->record);
-            changeEventForFd(clients[client_num].fd, POLLIN | POLLOUT);
-            clients[client_num].write_response_index = 0;
-            pthread_mutex_unlock(&clients[client_num].client_mutex);
-=======
             clients[client_num].cache_record = list_nodes->record;
             addSubscriber(clients[client_num].thread_fd, list_nodes->record);
             clients[client_num].write_response_index = 0;
@@ -1262,7 +731,6 @@ void findAndAddCacheRecord(char *url, size_t url_len, client_t *clients, size_t 
                 changeEventForFd(*poll_fds, poll_last_index, clients[client_num].fd, POLLIN | POLLOUT);
             }
             pthread_rwlock_unlock(&clients[client_num].cache_record->rw_lock);
->>>>>>> Stashed changes
             pthread_mutex_unlock(&cache_list->mutex);
             //fprintf(stderr, "client %d added to existing cache record\n", client_num);
             return;
@@ -1277,11 +745,7 @@ void findAndAddCacheRecord(char *url, size_t url_len, client_t *clients, size_t 
     if (new_node == NULL) {
         pthread_mutex_unlock(&cache_list->mutex);
         fprintf(stderr, "failed to add client %d to cache (can't create new node)\n", client_num);
-<<<<<<< Updated upstream
-        disconnectClient(client_num);
-=======
         disconnectClient(clients, CLIENTS_SIZE, client_num, *poll_fds, poll_last_index);
->>>>>>> Stashed changes
         return;
     }
     new_node->record = (cache_t *)calloc(1, sizeof(cache_t));
@@ -1289,11 +753,7 @@ void findAndAddCacheRecord(char *url, size_t url_len, client_t *clients, size_t 
         pthread_mutex_unlock(&cache_list->mutex);
         fprintf(stderr, "failed to add client %d to cache (can't create new record)\n", client_num);
         free(new_node);
-<<<<<<< Updated upstream
-        disconnectClient(client_num);
-=======
         disconnectClient(clients, CLIENTS_SIZE, client_num, *poll_fds, poll_last_index);
->>>>>>> Stashed changes
         return;
     }
     new_node->next = NULL;
@@ -1312,32 +772,17 @@ void findAndAddCacheRecord(char *url, size_t url_len, client_t *clients, size_t 
 
     new_node->record->request = (char *)calloc(REQUEST_SIZE, sizeof(char));
     if (new_node->record->request == NULL) {
-<<<<<<< Updated upstream
-        freeCacheRecord(new_node->record);
-        disconnectClient(client_num);
-        return;
-    }
-    pthread_mutex_lock(&clients[client_num].client_mutex);
-    memcpy(new_node->record->request, clients[client_num].request, REQUEST_SIZE);
-    pthread_mutex_unlock(&clients[client_num].client_mutex);
-=======
         freeCacheRecord(new_node->record, *servers, *SERVERS_SIZE, *poll_fds, poll_last_index);
         disconnectClient(clients, CLIENTS_SIZE, client_num, *poll_fds, poll_last_index);
         return;
     }
     memcpy(new_node->record->request, clients[client_num].request, REQUEST_SIZE);
->>>>>>> Stashed changes
     new_node->record->REQUEST_SIZE = REQUEST_SIZE;
     int server_fd = connectToServerHost(host, 80);
     if (server_fd == -1) {
         fprintf(stderr, "failed to connect to remote host: %s\n", host);
-<<<<<<< Updated upstream
-        freeCacheRecord(new_node->record);
-        disconnectClient(client_num);
-=======
         freeCacheRecord(new_node->record, *servers, *SERVERS_SIZE, *poll_fds, poll_last_index);
         disconnectClient(clients, CLIENTS_SIZE, client_num, *poll_fds, poll_last_index);
->>>>>>> Stashed changes
         free(host);
         return;
     }
@@ -1345,29 +790,6 @@ void findAndAddCacheRecord(char *url, size_t url_len, client_t *clients, size_t 
     if (fcntl_res < 0) {
         perror("make new server fd nonblock");
         close(server_fd);
-<<<<<<< Updated upstream
-        freeCacheRecord(new_node->record);
-        disconnectClient(client_num);
-        free(host);
-        return;
-    }
-    free(host);
-    int server_num = findFreeServer(server_fd);
-    servers[server_num].cache_record = new_node->record;
-    servers[server_num].write_request_index = 0;
-    addFdToPollFds(server_fd, POLLIN | POLLOUT);
-
-    new_node->record->server_index = server_num;
-
-    pthread_mutex_lock(&clients[client_num].client_mutex);
-    clients[client_num].cache_record = new_node->record;
-    addSubscriber(client_num, new_node->record);
-    clients[client_num].write_response_index = 0;
-    pthread_mutex_unlock(&clients[client_num].client_mutex);
-}
-
-void shiftRequest(int client_num, int pret) {
-=======
         freeCacheRecord(new_node->record, *servers, *SERVERS_SIZE, *poll_fds, poll_last_index);
         disconnectClient(clients, CLIENTS_SIZE, client_num, *poll_fds, poll_last_index);
         free(host);
@@ -1389,7 +811,6 @@ void shiftRequest(int client_num, int pret) {
 }
 
 void shiftRequest(client_t *clients, size_t CLIENTS_SIZE, int client_num, int pret) {
->>>>>>> Stashed changes
     if (client_num < 0 || client_num >= CLIENTS_SIZE || pret < 0 || clients[client_num].fd < 0 ||
         clients[client_num].request == NULL || clients[client_num].request_index == 0) {
         return;
@@ -1401,44 +822,23 @@ void shiftRequest(client_t *clients, size_t CLIENTS_SIZE, int client_num, int pr
     clients[client_num].request_index -= pret;
 }
 
-<<<<<<< Updated upstream
-void readFromClient(int client_num) {
-    //fprintf(stderr, "read from client %d\n", client_num);
-    if (client_num < 0 || client_num > CLIENTS_SIZE) {
-        return;
-    }
-    pthread_mutex_lock(&clients[client_num].client_mutex);
-    if (clients[client_num].fd == -1) {
-        pthread_mutex_unlock(&clients[client_num].client_mutex);
-=======
 void readFromClient(client_t *clients, size_t CLIENTS_SIZE, int client_num, struct pollfd **poll_fds,
         int *poll_last_index, size_t *POLL_TABLE_SIZE, server_t **servers, size_t *SERVERS_SIZE) {
     //fprintf(stderr, "read from client %d\n", client_num);
     if (client_num < 0 || client_num > CLIENTS_SIZE || clients[client_num].fd == -1) {
->>>>>>> Stashed changes
         return;
     }
     char buf[BUFSIZ];
     ssize_t was_read = read(clients[client_num].fd, buf, BUFSIZ);
     if (was_read < 0) {
-<<<<<<< Updated upstream
-        pthread_mutex_unlock(&clients[client_num].client_mutex);
-        perror("read");
-=======
         fprintf(stderr, "error in client %d ", client_num);
         perror("read");
         disconnectClient(clients, CLIENTS_SIZE, client_num, *poll_fds, poll_last_index);
->>>>>>> Stashed changes
         return;
     }
     else if (was_read == 0) {
         fprintf(stderr, "client %d closed connection\n", client_num);
-<<<<<<< Updated upstream
-        pthread_mutex_unlock(&clients[client_num].client_mutex);
-        disconnectClient(client_num);
-=======
         disconnectClient(clients, CLIENTS_SIZE, client_num, *poll_fds, poll_last_index);
->>>>>>> Stashed changes
         return;
     }
     if (clients[client_num].REQUEST_SIZE == 0) {
@@ -1446,13 +846,8 @@ void readFromClient(client_t *clients, size_t CLIENTS_SIZE, int client_num, stru
         clients[client_num].request = (char *)calloc(clients[client_num].REQUEST_SIZE, sizeof(char));
         if (clients[client_num].request == NULL) {
             fprintf(stderr, "calloc returned NULL\n");
-<<<<<<< Updated upstream
-            pthread_mutex_unlock(&clients[client_num].client_mutex);
-            disconnectClient(client_num);
-=======
             disconnectClient(clients, CLIENTS_SIZE, client_num, *poll_fds, poll_last_index);
             return;
->>>>>>> Stashed changes
         }
     }
     if (clients[client_num].request_index + was_read >= clients[client_num].REQUEST_SIZE) {
@@ -1471,26 +866,15 @@ void readFromClient(client_t *clients, size_t CLIENTS_SIZE, int client_num, stru
     int pret = phr_parse_request(clients[client_num].request, clients[client_num].request_index,
                                  (const char **)&method, &method_len, (const char **)&path, &path_len,
                                  &minor_version, headers, &num_headers, 0);
-<<<<<<< Updated upstream
-    pthread_mutex_unlock(&clients[client_num].client_mutex);
-    if (pret > 0) {
-        if (strncmp(method, "GET", method_len) != 0) {
-            disconnectClient(client_num);
-=======
     if (pret > 0) {
         if (strncmp(method, "GET", method_len) != 0) {
             disconnectClient(clients, CLIENTS_SIZE, client_num, *poll_fds, poll_last_index);
->>>>>>> Stashed changes
             return;
         }
         size_t url_len = path_len;
         char *url = calloc(url_len, sizeof(char));
         if (url == NULL) {
-<<<<<<< Updated upstream
-            disconnectClient(client_num);
-=======
             disconnectClient(clients, CLIENTS_SIZE, client_num, *poll_fds, poll_last_index);
->>>>>>> Stashed changes
             return;
         }
         memcpy(url, path, path_len);
@@ -1502,11 +886,7 @@ void readFromClient(client_t *clients, size_t CLIENTS_SIZE, int client_num, stru
                 host = calloc(headers[i].value_len + 1, sizeof(char));
                 if (host == NULL) {
                     free(url);
-<<<<<<< Updated upstream
-                    disconnectClient(client_num);
-=======
                     disconnectClient(clients, CLIENTS_SIZE, client_num, *poll_fds, poll_last_index);
->>>>>>> Stashed changes
                     return;
                 }
                 memcpy(host, headers[i].value, headers[i].value_len);
@@ -1515,19 +895,6 @@ void readFromClient(client_t *clients, size_t CLIENTS_SIZE, int client_num, stru
         }
         if (host == NULL) {
             free(url);
-<<<<<<< Updated upstream
-            disconnectClient(client_num);
-            return;
-        }
-        findAndAddCacheRecord(url, url_len, client_num, host, pret);
-
-        pthread_mutex_lock(&clients[client_num].client_mutex);
-        shiftRequest(client_num, pret);
-        pthread_mutex_unlock(&clients[client_num].client_mutex);
-    }
-    else if (pret == -1) {
-        disconnectClient(client_num);
-=======
             disconnectClient(clients, CLIENTS_SIZE, client_num, *poll_fds, poll_last_index);
             return;
         }
@@ -1539,51 +906,29 @@ void readFromClient(client_t *clients, size_t CLIENTS_SIZE, int client_num, stru
     }
     else if (pret == -1) {
         disconnectClient(clients, CLIENTS_SIZE, client_num, *poll_fds, poll_last_index);
->>>>>>> Stashed changes
     }
 }
 
 
-<<<<<<< Updated upstream
-void writeToServer(int server_num) {
-    //fprintf(stderr, "write to server %d\n", server_num);
-    if (server_num < 0 || server_num >= SERVERS_SIZE) {
-=======
 void writeToServer(server_t *servers, size_t SERVERS_SIZE, int server_num, struct pollfd *poll_fds,
         int *poll_last_index) {
     //fprintf(stderr, "write to server %d, SERVERS_SIZE = %lu\n", server_num, SERVERS_SIZE);
     if (server_num < 0 || server_num >= SERVERS_SIZE || servers[server_num].fd == -1) {
->>>>>>> Stashed changes
         return;
     }
     ssize_t written = write(servers[server_num].fd,
                             &servers[server_num].cache_record->request[servers[server_num].write_request_index],
                             servers[server_num].cache_record->REQUEST_SIZE -
                                 servers[server_num].write_request_index);
-<<<<<<< Updated upstream
-    if (written < 0) {
-        perror("write");
-        disconnectServer(server_num);
-=======
     //fprintf(stderr, "written %ld to server %d\n", written, server_num);
     if (written < 0) {
         fprintf(stderr, "error in server %d ", server_num);
         perror("write");
         disconnectServer(servers, SERVERS_SIZE, server_num, poll_fds, poll_last_index);
->>>>>>> Stashed changes
         return;
     }
     servers[server_num].write_request_index += (int)written;
     if (servers[server_num].write_request_index == servers[server_num].cache_record->REQUEST_SIZE) {
-<<<<<<< Updated upstream
-        changeEventForFd(servers[server_num].fd, POLLIN);
-    }
-}
-
-void readFromServer(int server_num) {
-    //fprintf(stderr, "read from server %d\n", server_num);
-    if (server_num < 0 || server_num >= SERVERS_SIZE) {
-=======
         changeEventForFd(poll_fds, poll_last_index, servers[server_num].fd, POLLIN);
     }
 }
@@ -1592,17 +937,13 @@ void readFromServer(server_t *servers, size_t SERVERS_SIZE, int server_num, stru
         int *poll_last_index) {
     //fprintf(stderr, "read from server %d\n", server_num);
     if (server_num < 0 || server_num >= SERVERS_SIZE || servers[server_num].fd == -1) {
->>>>>>> Stashed changes
         return;
     }
     char buf[BUFSIZ];
     ssize_t was_read = read(servers[server_num].fd, buf, BUFSIZ);
     //fprintf(stderr, "server %d was_read = %ld\n", server_num, was_read);
     if (was_read < 0) {
-<<<<<<< Updated upstream
-=======
         fprintf(stderr, "error in server %d ", server_num);
->>>>>>> Stashed changes
         perror("read");
         return;
     }
@@ -1616,13 +957,8 @@ void readFromServer(server_t *servers, size_t SERVERS_SIZE, int server_num, stru
         servers[server_num].cache_record->RESPONSE_SIZE = servers[server_num].cache_record->response_index;
 
         pthread_rwlock_unlock(&servers[server_num].cache_record->rw_lock);
-<<<<<<< Updated upstream
-        notifySubscribers(servers[server_num].cache_record, POLLIN | POLLOUT);
-        disconnectServer(server_num);
-=======
         notifySubscribers(servers[server_num].cache_record);
         disconnectServer(servers, SERVERS_SIZE, server_num, poll_fds, poll_last_index);
->>>>>>> Stashed changes
         return;
     }
     pthread_rwlock_wrlock(&servers[server_num].cache_record->rw_lock);
@@ -1630,14 +966,9 @@ void readFromServer(server_t *servers, size_t SERVERS_SIZE, int server_num, stru
         servers[server_num].cache_record->RESPONSE_SIZE = START_RESPONSE_SIZE;
         servers[server_num].cache_record->response = (char *)calloc(START_RESPONSE_SIZE, sizeof(char));
         if (servers[server_num].cache_record->response == NULL) {
-<<<<<<< Updated upstream
-            disconnectServer(server_num);
-            pthread_rwlock_unlock(&servers[server_num].cache_record->rw_lock);
-=======
             disconnectServer(servers, SERVERS_SIZE, server_num, poll_fds, poll_last_index);
             pthread_rwlock_unlock(&servers[server_num].cache_record->rw_lock);
             return;
->>>>>>> Stashed changes
         }
     }
     if (was_read + servers[server_num].cache_record->response_index >=
@@ -1663,11 +994,7 @@ void readFromServer(server_t *servers, size_t SERVERS_SIZE, int server_num, stru
                                   &minor_version, &status, (const char **)&msg, &msg_len, headers,
                                   &num_headers, prev_len);
     pthread_rwlock_unlock(&servers[server_num].cache_record->rw_lock);
-<<<<<<< Updated upstream
-    notifySubscribers(servers[server_num].cache_record, POLLIN | POLLOUT);
-=======
     notifySubscribers(servers[server_num].cache_record);
->>>>>>> Stashed changes
     if (pret > 0) {
         if (status >= 200 && status < 300) {
             servers[server_num].cache_record->private = false;
@@ -1676,19 +1003,6 @@ void readFromServer(server_t *servers, size_t SERVERS_SIZE, int server_num, stru
 }
 
 
-<<<<<<< Updated upstream
-void writeToClient(int client_num) {
-    //fprintf(stderr, "write to client %d\n", client_num);
-    if (client_num < 0 || client_num >= CLIENTS_SIZE) {
-        fprintf(stderr, "invalid client_num %d\n", client_num);
-        return;
-    }
-    pthread_mutex_lock(&clients[client_num].client_mutex);
-    if (clients[client_num].cache_record == NULL) {
-        fprintf(stderr, "client %d cache record is NULL\n", client_num);
-        pthread_mutex_unlock(&clients[client_num].client_mutex);
-        disconnectClient(client_num);
-=======
 void writeToClient(client_t *clients, size_t CLIENTS_SIZE, int client_num, struct pollfd *poll_fds,
         int *poll_last_index, server_t *servers, size_t SERVERS_SIZE) {
     //fprintf(stderr, "write to client %d\n", client_num);
@@ -1699,21 +1013,14 @@ void writeToClient(client_t *clients, size_t CLIENTS_SIZE, int client_num, struc
     if (clients[client_num].cache_record == NULL) {
         fprintf(stderr, "client %d cache record is NULL\n", client_num);
         disconnectClient(clients, CLIENTS_SIZE, client_num, poll_fds, poll_last_index);
->>>>>>> Stashed changes
         return;
     }
     //printCacheRecord(clients[client_num].cache_record);
     if (clients[client_num].cache_record->server_index == -1 &&
         !clients[client_num].cache_record->full) {
         //fprintf(stderr, "invalid cache record detected by client %d\n", client_num);
-<<<<<<< Updated upstream
-        freeCacheRecord(clients[client_num].cache_record);
-        pthread_mutex_unlock(&clients[client_num].client_mutex);
-        disconnectClient(client_num);
-=======
         freeCacheRecord(clients[client_num].cache_record, servers, SERVERS_SIZE, poll_fds, poll_last_index);
         disconnectClient(clients, CLIENTS_SIZE, client_num, poll_fds, poll_last_index);
->>>>>>> Stashed changes
         return;
     }
     //fprintf(stderr, "acquire rdlock by client %d...\n", client_num);
@@ -1728,27 +1035,15 @@ void writeToClient(client_t *clients, size_t CLIENTS_SIZE, int client_num, struc
     pthread_rwlock_unlock(&clients[client_num].cache_record->rw_lock);
     //fprintf(stderr, "written %ld to client %d\n", written, client_num);
     if (written < 0) {
-<<<<<<< Updated upstream
-        perror("write");
-        pthread_mutex_unlock(&clients[client_num].client_mutex);
-        disconnectClient(client_num);
-=======
         fprintf(stderr, "error in client %d ", client_num);
         perror("write");
         disconnectClient(clients, CLIENTS_SIZE, client_num, poll_fds, poll_last_index);
->>>>>>> Stashed changes
         return;
     }
     clients[client_num].write_response_index += (int)written;
     if (clients[client_num].write_response_index == clients[client_num].cache_record->response_index) {
-<<<<<<< Updated upstream
-        changeEventForFd(clients[client_num].fd, POLLIN);
-    }
-    pthread_mutex_unlock(&clients[client_num].client_mutex);
-=======
         changeEventForFd(poll_fds, poll_last_index, clients[client_num].fd, POLLIN);
     }
->>>>>>> Stashed changes
 
 }
 
@@ -1763,8 +1058,6 @@ static void sigCatch(int sig) {
     }
 }
 
-<<<<<<< Updated upstream
-=======
 void *threadFunc(void *arg) {
     //fprintf(stderr, "starting pooled thread...\n");
     int thread_fd = eventfd(0, EFD_NONBLOCK);
@@ -1939,7 +1232,6 @@ void *threadFunc(void *arg) {
     pthread_exit((void *)0);
 }
 
->>>>>>> Stashed changes
 int main(int argc, char *argv[]) {
     if (argc < 3) {
         fprintf(stderr, "Error wrong amount of arguments\n");
@@ -1958,15 +1250,8 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Error wrong port\n");
         exit(ERROR_PORT_CONVERSATION);
     }
-<<<<<<< Updated upstream
-    pthread_mutex_init(&tasks_counter_mutex, NULL);
-    valid_tasks_completed_mutex = true;
-    pthread_cond_init(&cond, NULL);
-    valid_cond = true;
-=======
     pthread_mutex_init(&thread_pool_size_mutex, NULL);
     valid_thread_pool_size_mutex = true;
->>>>>>> Stashed changes
 
     tids = (pthread_t *)calloc(THREAD_POOL_SIZE, sizeof(pthread_t));
     if (tids == NULL) {
@@ -1998,9 +1283,6 @@ int main(int argc, char *argv[]) {
         exit(ERROR_INIT_SYNC_PIPE);
     }
 
-<<<<<<< Updated upstream
-    initPollFds();
-=======
     size_t POLL_TABLE_SIZE = 4;
     int poll_last_index = -1;
     struct pollfd *poll_fds = initPollFds(POLL_TABLE_SIZE, &poll_last_index);
@@ -2008,7 +1290,6 @@ int main(int argc, char *argv[]) {
         cleanUp();
         exit(ERROR_ALLOC);
     }
->>>>>>> Stashed changes
     int pipe_fds[2];
     int pipe_res = pipe(pipe_fds);
     if (pipe_res != 0) {
@@ -2017,11 +1298,7 @@ int main(int argc, char *argv[]) {
     }
     READ_STOP_FD = pipe_fds[0];
     WRITE_STOP_FD = pipe_fds[1];
-<<<<<<< Updated upstream
-    addFdToPollFds(READ_STOP_FD, POLLIN);
-=======
     addFdToPollFds(&poll_fds, &poll_last_index, &POLL_TABLE_SIZE, READ_STOP_FD, POLLIN);
->>>>>>> Stashed changes
 
     struct sigaction sig_act = { 0 };
     sig_act.sa_handler = sigCatch;
@@ -2044,30 +1321,15 @@ int main(int argc, char *argv[]) {
             is_created_thread[i] = false;
         }
         else {
-<<<<<<< Updated upstream
-            REAL_THREAD_POOL_SIZE += 1;
-=======
             pthread_mutex_lock(&thread_pool_size_mutex);
             REAL_THREAD_POOL_SIZE += 1;
             pthread_mutex_unlock(&thread_pool_size_mutex);
->>>>>>> Stashed changes
             is_created_thread[i] = true;
         }
     }
     pthread_sigmask(SIG_SETMASK, &old_set, NULL);
 
     initRwLockAttr();
-<<<<<<< Updated upstream
-    initClients();
-    initServers();
-    initCacheList();
-
-    int listen_fd = initListener(port);
-    addFdToPollFds(listen_fd, POLLIN);
-
-    while (1) {
-        //fprintf(stderr, "poll()\n");
-=======
     initCacheList();
 
     int listen_fd = initListener(port);
@@ -2075,7 +1337,6 @@ int main(int argc, char *argv[]) {
 
     while (!is_stop) {
         //fprintf(stderr, "main poll()\n");
->>>>>>> Stashed changes
         int poll_res = poll(poll_fds, poll_last_index, TIMEOUT * 1000);
         if (poll_res < 0) {
             perror("poll");
@@ -2088,11 +1349,7 @@ int main(int argc, char *argv[]) {
         int num_handled_fd = 0;
         size_t i = 0;
         size_t prev_last_index = poll_last_index;
-<<<<<<< Updated upstream
-        /*fprintf(stderr, "poll_res = %d\n", poll_res);
-=======
         /*fprintf(stderr, "main: poll_res = %d, prev_last_index = %lu\n", poll_res, prev_last_index);
->>>>>>> Stashed changes
         for (int j = 0; j < prev_last_index; j++) {
             fprintf(stderr, "poll_fds[%d] = %d : ", j, poll_fds[j].fd);
             if (poll_fds[j].revents & POLLIN) {
@@ -2103,10 +1360,6 @@ int main(int argc, char *argv[]) {
             }
             fprintf(stderr, "\n");
         }*/
-<<<<<<< Updated upstream
-        while (num_handled_fd < poll_res && i < prev_last_index) {
-            if (poll_fds[i].fd == READ_STOP_FD && (poll_fds[i].revents & POLLIN)) {
-=======
         while (num_handled_fd < poll_res && i < prev_last_index && !is_stop) {
             //fprintf(stderr, "main: i = %lu, num_handled = %d\n", i, num_handled_fd);
             if (poll_fds[i].fd == READ_STOP_FD && (poll_fds[i].revents & POLLIN)) {
@@ -2114,120 +1367,10 @@ int main(int argc, char *argv[]) {
                 removeFromPollFds(poll_fds, &poll_last_index, READ_STOP_FD);
                 READ_STOP_FD = -1;
                 destroyPollFds(poll_fds, &poll_last_index);
->>>>>>> Stashed changes
                 cleanUp();
                 exit(0);
             }
             if (poll_fds[i].fd == listen_fd && (poll_fds[i].revents & POLLIN)) {
-<<<<<<< Updated upstream
-                acceptNewClient(listen_fd);
-                num_handled_fd += 1;
-                i += 1;
-                continue;
-            }
-
-            int client_num = findClientByFd(poll_fds[i].fd);
-            int server_num = -1;
-            if (client_num == -1) {
-                server_num = findServerByFd(poll_fds[i].fd);
-            }
-            //fprintf(stderr, "poll_fds[%lu].fd = %d, client %d, server %d\n", i, poll_fds[i].fd, client_num, server_num);
-            bool handled = false;
-            if (poll_fds[i].revents & POLLIN) {
-                if (client_num != -1) {
-                    task_t *task = (task_t *)calloc(1, sizeof(task_t));
-                    if (task == NULL) {
-                        i += 1;
-                        continue;
-                    }
-                    task->func = readFromClient;
-                    task->arg = client_num;
-                    //readFromClient(client_num);
-                    int submit_res = submitTask(task_queue, task);
-                    if (submit_res == 0) {
-                        sync_pipe_notify(1);
-                        pthread_mutex_lock(&tasks_counter_mutex);
-                        tasks_submitted += 1;
-                        pthread_mutex_unlock(&tasks_counter_mutex);
-                    }
-                }
-                else if (server_num != -1) {
-                    task_t *task = (task_t *)calloc(1, sizeof(task_t));
-                    if (task == NULL) {
-                        i += 1;
-                        continue;
-                    }
-                    task->func = readFromServer;
-                    task->arg = server_num;
-                    //readFromServer(server_num);
-                    int submit_res = submitTask(task_queue, task);
-                    if (submit_res == 0) {
-                        sync_pipe_notify(1);
-                        pthread_mutex_lock(&tasks_counter_mutex);
-                        tasks_submitted += 1;
-                        pthread_mutex_unlock(&tasks_counter_mutex);
-                    }
-                }
-                handled = true;
-            }
-            if (poll_fds[i].revents & POLLOUT) {
-                if (client_num != -1) {
-                    task_t *task = (task_t *)calloc(1, sizeof(task_t));
-                    if (task == NULL) {
-                        i += 1;
-                        continue;
-                    }
-                    task->func = writeToClient;
-                    task->arg = client_num;
-                    //writeToClient(client_num);
-                    int submit_res = submitTask(task_queue, task);
-                    if (submit_res == 0) {
-                        sync_pipe_notify(1);
-                        pthread_mutex_lock(&tasks_counter_mutex);
-                        tasks_submitted += 1;
-                        pthread_mutex_unlock(&tasks_counter_mutex);
-                    }
-                }
-                else if (server_num != -1) {
-                    task_t *task = (task_t *)calloc(1, sizeof(task_t));
-                    if (task == NULL) {
-                        i += 1;
-                        continue;
-                    }
-                    task->func = writeToServer;
-                    task->arg = server_num;
-                    //writeToServer(server_num);
-                    int submit_res = submitTask(task_queue, task);
-                    if (submit_res == 0) {
-                        sync_pipe_notify(1);
-                        pthread_mutex_lock(&tasks_counter_mutex);
-                        tasks_submitted += 1;
-                        pthread_mutex_unlock(&tasks_counter_mutex);
-                    }
-                }
-                handled = true;
-            }
-            if (client_num == -1 && server_num == -1 && poll_fds[i].fd != listen_fd && poll_fds[i].fd != READ_STOP_FD) {
-                removeFromPollFds(poll_fds[i].fd);
-            }
-            if (handled) {
-                num_handled_fd += 1;
-            }
-            i += 1;
-        }
-
-        pthread_mutex_lock(&tasks_counter_mutex);
-        int err = 0;
-        while (tasks_submitted != tasks_completed && err == 0) {
-            err = pthread_cond_wait(&cond, &tasks_counter_mutex);
-        }
-        tasks_submitted = 0;
-        tasks_completed = 0;
-        pthread_mutex_unlock(&tasks_counter_mutex);
-
-        //printCacheList();
-    }
-=======
                 //fprintf(stderr, "acceptNewClient()\n");
                 acceptNewClient(listen_fd);
                 num_handled_fd += 1;
@@ -2244,7 +1387,6 @@ int main(int argc, char *argv[]) {
     removeFromPollFds(poll_fds, &poll_last_index, READ_STOP_FD);
     READ_STOP_FD = -1;
     destroyPollFds(poll_fds, &poll_last_index);
->>>>>>> Stashed changes
     cleanUp();
     return 0;
 }
