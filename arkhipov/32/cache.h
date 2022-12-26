@@ -1,6 +1,10 @@
 #ifndef CACHEPROXY_CACHE_H
 #define CACHEPROXY_CACHE_H
 
+#define STATUS_INITIAL (0)
+#define STATUS_IN_PROCESS (1)
+#define STATUS_COMPLETED (2)
+
 #include <stdlib.h>
 #include <pthread.h>
 #include <string.h>
@@ -11,6 +15,8 @@ typedef struct {
     char* key;
     int key_size;
     long last_visited;
+    char status;
+    pthread_rwlock_t rwlock;
 } CacheItem;
 
 typedef struct {
@@ -25,7 +31,6 @@ typedef struct CacheNode {
 
 typedef struct {
     CacheNode* buckets;
-    pthread_mutex_t* mutexes;
     int* buckets_size;
     int size;
     int bucket_capacity;
@@ -33,9 +38,7 @@ typedef struct {
 
 int InitCache(Cache* cache, int size, int bucket_capacity);
 
-int InsertCacheItem(Cache* cache, CacheItem* item);
-
-CacheRow* GetCacheItem(Cache* cache, char* key, int size);
+CacheItem* GetOrCreateCacheItem(Cache* cache, char* key, int size);
 
 void LookupAndClean(Cache* cache, long timeout);
 

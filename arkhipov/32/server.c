@@ -15,7 +15,7 @@
 #include "cache.h"
 
 #define POLL_TIMEOUT (1000)
-#define CLEANUP_TIMEOUT (10)
+#define CLEANUP_TIMEOUT (20)
 #define URL_BUFF_SIZE (1024)
 #define GET_REQ_SIZE (8)
 #define HTTP_DELIM "://"
@@ -110,10 +110,11 @@ void ParseFullURL(char* host, char* path, int* port, char* full_url) {
     }
 }
 
-int ReadFromHost(int host_socket, char** content) {
+int ReadFromHost(int host_socket, CacheItem* cacheItem) {
     int content_size = BUFSIZ;
     int read_count = 0;
     int read_iter = 1;
+    char** content = &cacheItem->content;
     *content = malloc(content_size * sizeof(char));
     if (*content == NULL) {
         return -1;
@@ -130,6 +131,7 @@ int ReadFromHost(int host_socket, char** content) {
         read_iter = (int)read(host_socket, *content + read_count, content_size - read_count);
         read_count += read_iter;
     }
+    cacheItem->content_size = read_count;
     return read_count;
 }
 
@@ -160,12 +162,28 @@ int ConnectToHost(char* host, int port) {
 int WriteToClient(int client_fd, const char* buff, int size) {
     int write_size = 0;
     while (write_size != size) {
-        int write_iter = send(client_fd, buff + write_size, size, 0);
+        int write_iter = send(client_fd, buff + write_size, size - write_size, 0);
         if (write_iter < 1) {
             return 1;
         }
         write_size += write_iter;
     }
+    return 0;
+}
+
+int WriteToClientFromCache(int client_fd, CacheItem* cache_item) {
+    pthread_rwlock_rdlock(&(cache_item->rwlock));
+    int write_size = 0;
+    char* buff = cache_item->content;
+    while (write_size != cache_item->content_size || cache_item->status != STATUS_COMPLETED) {
+        int write_iter = send(client_fd, buff + write_size, cache_item->content_size - write_size, 0);
+        if (write_iter < 1) {
+            pthread_rwlock_unlock(&(cache_item->rwlock));
+            return 1;
+        }
+        write_size += write_iter;
+    }
+    pthread_rwlock_unlock(&(cache_item->rwlock));
     return 0;
 }
 
@@ -211,10 +229,16 @@ void* ClientWorker(void* arg) {
             if ((int) input_buffer[0] == 0) {
                 HandleClientDisconnect(client_item, server);
             }
-            printf("Get request:\n%s\n", input_buffer);
-            CacheRow *cache_row = GetCacheItem(server->cache, input_buffer, read_bytes);
-            if (cache_row == NULL) {
-                printf("Unable to find:\n%s\nin cache\n", input_buffer);
+            printf("Get request from client %d\n", client_item->idx);
+            CacheItem* cache_item = GetOrCreateCacheItem(server->cache, input_buffer, read_bytes);
+            if (cache_item == NULL) {
+                fprintf(stderr, "Unable to process request (cache is full)\n");
+                HandleClientDisconnect(client_item, server);
+            }
+            pthread_rwlock_wrlock(&(cache_item->rwlock));
+            if (cache_item->status == STATUS_INITIAL) {
+                cache_item->status = STATUS_IN_PROCESS;
+                printf("Unable to find cache item for client %d\n", client_item->idx);
                 char url[BUFSIZ];
                 int err = ExtractUrl(url, input_buffer);
                 if (err != 0) {
@@ -242,8 +266,10 @@ void* ClientWorker(void* arg) {
                     }
                     printf("Send GET request to %s\n", host);
 
-                    char *content;
-                    int content_size = ReadFromHost(host_sock, &content);
+                    // read from host
+                    int content_size = ReadFromHost(host_sock, cache_item);
+                    cache_item->status = STATUS_COMPLETED;
+                    pthread_rwlock_unlock(&(cache_item->rwlock));
                     if (content_size < 0) {
                         fprintf(stderr, "Error while allocate memory for response\n");
                         HandleClientDisconnect(client_item, server);
@@ -251,48 +277,25 @@ void* ClientWorker(void* arg) {
                     close(host_sock);
 
                     // write to client
-                    WriteToClient(client_fd, content, content_size);
+                    WriteToClientFromCache(client_fd, cache_item);
                     if (err != 0) {
                         fprintf(stderr, "Error while write to client\n");
                         HandleClientDisconnect(client_item, server);
                     }
                     printf("Send %s response to client\n", host);
 
-                    // write to cache
-                    CacheItem *cache_item = malloc(sizeof(CacheItem));
-                    if (cache_item == NULL) {
-                        HandleClientDisconnect(client_item, server);
-                    }
-                    cache_item->content = content;
-                    cache_item->last_visited = time(NULL);
-                    cache_item->content_size = content_size;
-                    cache_item->key = malloc((read_bytes + 1) * sizeof(char));
-                    if (cache_item->key == NULL) {
-                        fprintf(stderr, "Unable to allocate memory for cache row\n");
-                    }
-                    strcpy(cache_item->key, input_buffer);
-                    cache_item->key_size = read_bytes;
-                    int err = InsertCacheItem(server->cache, cache_item);
-                    if (err != 0) {
-                        fprintf(stderr, "Unable to save to cache\n");
-                    }
-                    printf("Save %s response to cache\n", host);
-
                     HandleClientDisconnect(client_item, server);
                 }
             } else {
-                printf("Find %s in cache\n", input_buffer);
+                pthread_rwlock_unlock(&(cache_item->rwlock));
+                printf("Find cache item for %d\n", client_item->idx);
 
                 // get data from cache
-                int err = WriteToClient(client_fd, cache_row->content, cache_row->content_size);
+                int err = WriteToClientFromCache(client_fd, cache_item);
                 if (err != 0) {
                     fprintf(stderr, "Error while write to client\n");
                     HandleClientDisconnect(client_item, server);
                 }
-                // cache_row allocates in GetCacheItem
-                // So client responsible for that memory
-                free(cache_row->content);
-                free(cache_row);
             }
         }
     }

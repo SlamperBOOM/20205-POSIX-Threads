@@ -2,14 +2,15 @@ import aiohttp
 import asyncio
 import time
 
-PROXY = "http://127.0.0.1:8081"
+PROXY = "http://127.0.0.1:8080"
 HOST = "http://ccfit.nsu.ru/~rzheutskiy/test_files/"
 
 SMALL = "50mb.dat"
 MEDIUM = "100mb.dat"
 
 
-async def do_request(additional_path):
+async def do_request(additional_path, sleep_time):
+    await asyncio.sleep(sleep_time)
     path = f"{HOST}{additional_path}"
     print(f"Do request to {path}.")
     headers = {"Connection": "close"}
@@ -25,29 +26,14 @@ async def do_request(additional_path):
 
 async def main():
 
-    print("Send one request for small file")
-    await do_request("50mb.dat")
+    loop = asyncio.get_event_loop()
+    tasks = []
+    for i in range(20):
+        tasks.append(do_request("50mb.dat", 0))
+    for i in range(20):
+        tasks.append(do_request("100mb.dat", 0))
+    await asyncio.gather(*tasks)
 
-    print("Send 5 async requests for small file")
-    await asyncio.gather(
-        do_request("50mb.dat"),
-        do_request("50mb.dat"),
-        do_request("50mb.dat"),
-        do_request("50mb.dat"),
-        do_request("50mb.dat"),
-    )
-
-    print("Send one request for medium file")
-    await do_request("100mb.dat")
-
-    print("Send 5 async requests for medium file")
-    await asyncio.gather(
-        do_request("100mb.dat"),
-        do_request("100mb.dat"),
-        do_request("100mb.dat"),
-        do_request("100mb.dat"),
-        do_request("100mb.dat"),
-    )
 
 
 if __name__ == '__main__':
