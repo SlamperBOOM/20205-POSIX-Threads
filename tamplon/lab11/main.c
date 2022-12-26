@@ -143,6 +143,7 @@ int main() {
 		return EXIT_FAILURE;
 	}
 	if (lock_mutex(0) != SUCCESS) {
+		destroy_mutexes();
 		return EXIT_FAILURE;
 	}
 	pthread_t thread;
